@@ -1,0 +1,33 @@
+# ⚙️ Node.js
+node_modules/
+dist/
+build/
+
+# 🧪 Тестові покриття
+coverage/
+
+# 🛠 Логи, тимчасові файли
+*.log
+*.tmp
+*.swp
+*.swo
+
+# 💾 Секрети / змінні середовища
+.env
+.env.local
+.env.*.local
+
+# 💻 IDE
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 💅 TypeScript компіляція
+*.tsbuildinfo
+
+# ⛔ База sqlite (якщо колись використаєш)
+*.sqlite
+
+# 🔥 Компіляція в Docker (якщо додаш)
+docker-compose.override.yml
