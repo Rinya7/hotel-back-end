@@ -25,7 +25,7 @@ export const createRoom = async (req: AuthRequest, res: Response) => {
   } = req.body;
 
   const room = new Room();
-  room.number = number;
+  room.roomNumber = number;
   room.floor = floor;
   room.capacity = capacity;
   room.wifiName = wifiName;
@@ -39,49 +39,58 @@ export const createRoom = async (req: AuthRequest, res: Response) => {
   res.status(201).json(saved);
 };
 
-// PUT /rooms/:id
+// PUT /number/:roomNumber
 export const updateRoom = async (req: AuthRequest, res: Response) => {
   const adminId = req.user!.adminId;
-  const roomId = parseInt(req.params.id);
+  const roomNumber = req.params.roomNumber;
+
   const roomRepo = AppDataSource.getRepository(Room);
-
   const room = await roomRepo.findOne({
-    where: { id: roomId, admin: { id: adminId } },
+    where: { roomNumber, admin: { id: adminId } },
   });
-  if (!room) return res.status(404).json({ message: "Room not found" });
 
-  Object.assign(room, req.body); // оновлюємо все, що приходить
+  if (!room) {
+    return res.status(404).json({ message: "Room not found" });
+  }
+
+  Object.assign(room, req.body);
   const updated = await roomRepo.save(room);
   res.json(updated);
 };
 
-// PUT /rooms/:id/status
+// PUT /number/:roomNumber/status
 export const updateRoomStatus = async (req: AuthRequest, res: Response) => {
   const adminId = req.user!.adminId;
-  const roomId = parseInt(req.params.id);
+  const roomNumber = req.params.roomNumber;
   const { status } = req.body;
 
   const roomRepo = AppDataSource.getRepository(Room);
   const room = await roomRepo.findOne({
-    where: { id: roomId, admin: { id: adminId } },
+    where: { roomNumber, admin: { id: adminId } },
   });
-  if (!room) return res.status(404).json({ message: "Room not found" });
+
+  if (!room) {
+    return res.status(404).json({ message: "Room not found" });
+  }
 
   room.status = status;
   const updated = await roomRepo.save(room);
   res.json(updated);
 };
 
-// DELETE /rooms/:id
+// DELETE /number/:roomNumber
 export const deleteRoom = async (req: AuthRequest, res: Response) => {
   const adminId = req.user!.adminId;
-  const roomId = parseInt(req.params.id);
+  const roomNumber = req.params.roomNumber;
 
   const roomRepo = AppDataSource.getRepository(Room);
   const room = await roomRepo.findOne({
-    where: { id: roomId, admin: { id: adminId } },
+    where: { roomNumber, admin: { id: adminId } },
   });
-  if (!room) return res.status(404).json({ message: "Room not found" });
+
+  if (!room) {
+    return res.status(404).json({ message: "Room not found" });
+  }
 
   await roomRepo.remove(room);
   res.json({ message: "Room deleted" });

@@ -16,8 +16,8 @@ export class Room {
   @ManyToOne(() => Admin, (admin) => admin.rooms)
   admin!: Admin;
 
-  @Column()
-  number!: string;
+  @Column({ unique: true }) // 👈 тепер це унікальне поле, яке вводиться вручну
+  roomNumber!: string;
 
   @Column()
   floor!: number;

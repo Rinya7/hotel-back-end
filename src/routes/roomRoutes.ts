@@ -22,12 +22,17 @@ router.get("/", authenticateToken, isAdmin, getRooms);
 router.post("/", authenticateToken, isAdmin, createRoom);
 
 // ✏️ Повне редагування кімнати (wifi, capacity, і т.д.)
-router.put("/:id", authenticateToken, isAdmin, updateRoom);
+router.put("/number/:roomNumber", authenticateToken, isAdmin, updateRoom);
 
 // 🔄 Оновлення тільки статусу (free/booked/occupied)
-router.put("/:id/status", authenticateToken, isEditorOrAdmin, updateRoomStatus);
+router.put(
+  "/number/:roomNumber/status",
+  authenticateToken,
+  isEditorOrAdmin,
+  updateRoomStatus
+);
 
 // ❌ Видалення кімнати
-router.delete("/:id", authenticateToken, isAdmin, deleteRoom);
+router.delete("/number/:roomNumber", authenticateToken, isAdmin, deleteRoom);
 
 export default router;
