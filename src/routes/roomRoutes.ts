@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  getAllRooms,
   getRooms,
   createRoom,
   updateRoom,
@@ -11,10 +12,12 @@ import {
   authenticateToken,
   isAdmin,
   isEditorOrAdmin,
+  isSuperadmin,
 } from "../middlewares/authMiddleware";
 
 const router = Router();
-
+// 🔓 Перегляд усіх кімнат по всій системі для superadmina
+router.get("/all", authenticateToken, isSuperadmin, getAllRooms);
 // 🔓 Перегляд усіх кімнат
 router.get("/", authenticateToken, isAdmin, getRooms);
 

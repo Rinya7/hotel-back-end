@@ -3,6 +3,17 @@ import { AppDataSource } from "../config/data-source";
 import { Room } from "../entities/Room";
 import { AuthRequest } from "../middlewares/authMiddleware";
 
+//GET /rooms/all — тільки для superadmin
+export const getAllRooms = async (req: AuthRequest, res: Response) => {
+  const roomRepo = AppDataSource.getRepository(Room);
+  const rooms = await roomRepo.find({
+    relations: ["admin"],
+    order: { roomNumber: "ASC" },
+  });
+
+  res.json(rooms);
+};
+
 // GET /rooms
 export const getRooms = async (req: AuthRequest, res: Response) => {
   const adminId = req.user!.adminId;
@@ -15,7 +26,7 @@ export const getRooms = async (req: AuthRequest, res: Response) => {
 export const createRoom = async (req: AuthRequest, res: Response) => {
   const adminId = req.user!.adminId;
   const {
-    number,
+    roomNumber,
     floor,
     capacity,
     wifiName,
@@ -25,7 +36,7 @@ export const createRoom = async (req: AuthRequest, res: Response) => {
   } = req.body;
 
   const room = new Room();
-  room.roomNumber = number;
+  room.roomNumber = roomNumber;
   room.floor = floor;
   room.capacity = capacity;
   room.wifiName = wifiName;
@@ -63,7 +74,10 @@ export const updateRoomStatus = async (req: AuthRequest, res: Response) => {
   const adminId = req.user!.adminId;
   const roomNumber = req.params.roomNumber;
   const { status } = req.body;
-
+  const validStatuses = ["free", "booked", "occupied"];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ message: "Invalid status value" });
+  }
   const roomRepo = AppDataSource.getRepository(Room);
   const room = await roomRepo.findOne({
     where: { roomNumber, admin: { id: adminId } },

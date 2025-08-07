@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 export interface AuthRequest extends Request {
   user?: {
     adminId: number;
-    role: "admin" | "editor";
+    role: "superadmin" | "admin" | "editor";
   };
 }
 
@@ -30,7 +30,16 @@ export const authenticateToken = (
     next();
   });
 };
-
+export const isSuperadmin = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (req.user?.role !== "superadmin") {
+    return res.status(403).json({ message: "Superadmin only" });
+  }
+  next();
+};
 export const isAdmin = (
   req: AuthRequest,
   res: Response,

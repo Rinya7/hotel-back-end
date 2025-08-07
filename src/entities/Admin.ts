@@ -20,7 +20,7 @@ export class Admin {
 
   // Роль: 'admin' = головний, 'editor' = помічник
   @Column({ default: "admin" })
-  role!: "admin" | "editor";
+  role!: "superadmin" | "admin" | "editor";
 
   // Якщо це editor — хто його створив
   @ManyToOne(() => Admin, (admin) => admin.createdEditorAdmins, {
@@ -35,4 +35,7 @@ export class Admin {
   // Всі номери, якими володіє цей адмін
   @OneToMany(() => Room, (room) => room.admin)
   rooms!: Room[];
+
+  @Column({ default: false })
+isBlocked!: boolean;
 }

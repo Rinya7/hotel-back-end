@@ -1,16 +1,42 @@
 import { Router } from "express";
 import {
+  createAdminBySuperadmin,
+  getUsers,
   loginAdmin,
-  registerAdmin,
   createEditorAdmin,
+  deleteAdminOrEditor,
+  blockAdmin,
+  unblockAdmin,
 } from "../controllers/auth.controller";
 
-import { authenticateToken, isAdmin } from "../middlewares/authMiddleware";
+import {
+  authenticateToken,
+  isAdmin,
+  isSuperadmin,
+} from "../middlewares/authMiddleware";
 
 const router = Router();
 
-router.post("/register", registerAdmin); // створення головного адміна
-router.post("/login", loginAdmin); // вхід
-router.post("/create-editor", authenticateToken, isAdmin, createEditorAdmin); // 👈 створення editor
+// 🔓 Вхід
+router.post("/login", loginAdmin);
+
+// 🔐 Створення адміна — тільки для superadmin
+router.post(
+  "/create-admin",
+  authenticateToken,
+  isSuperadmin,
+  createAdminBySuperadmin
+);
+
+// 🔐 Створення редактора — тільки для admin
+router.post("/create-editor", authenticateToken, isAdmin, createEditorAdmin);
+// 🔐 Перегляд створених користувачів superadmin бачив усіх admin + їх editor'ів або admin бачив лише своїх editor'ів
+router.get("/users", authenticateToken, getUsers);
+// 🔐 Блокування/розблокування адмінів — тільки для superadmin
+router.put("/block/:username", authenticateToken, isSuperadmin, blockAdmin);
+router.put("/unblock/:username", authenticateToken, isSuperadmin, unblockAdmin);
+
+// ❌ Видалення користувача (admin → себе/редакторів; superadmin → будь-кого)
+router.delete("/delete/:username", authenticateToken, deleteAdminOrEditor);
 
 export default router;
