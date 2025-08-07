@@ -74,13 +74,21 @@ export const loginAdmin = async (req: Request, res: Response) => {
   const { username, password } = req.body;
 
   const adminRepository = AppDataSource.getRepository(Admin);
-  const admin = await adminRepository.findOneBy({ username });
+  const admin = await adminRepository.findOne({
+    where: { username },
+    relations: ["createdBy"],
+  });
 
   if (!admin) {
     return res.status(401).json({ message: "Invalid credentials" });
   }
   if (admin.role === "admin" && admin.isBlocked) {
     return res.status(403).json({ message: "Account is blocked" });
+  }
+  if (admin.role === "editor" && admin.createdBy?.isBlocked) {
+    return res
+      .status(403)
+      .json({ message: "Admin is blocked — editor access denied" });
   }
   const isMatch = await bcrypt.compare(password, admin.password);
   if (!isMatch) {
@@ -136,30 +144,46 @@ export const createEditorAdmin = async (req: AuthRequest, res: Response) => {
 export const blockAdmin = async (req: AuthRequest, res: Response) => {
   const username = req.params.username;
   const adminRepo = AppDataSource.getRepository(Admin);
-  const target = await adminRepo.findOneBy({ username });
+  const target = await adminRepo.findOne({
+    where: { username },
+    relations: ["createdEditorAdmins"],
+  });
 
   if (!target || target.role !== "admin") {
     return res.status(404).json({ message: "Admin not found" });
   }
 
   target.isBlocked = true;
-  await adminRepo.save(target);
-  res.json({ message: `Admin ${username} blocked` });
+  // 👉 Автоматично блочимо всіх editor'ів, яких він створив
+  for (const editor of target.createdEditorAdmins) {
+    editor.isBlocked = true;
+  }
+  await adminRepo.save([target, ...target.createdEditorAdmins]);
+  res.json({ message: `Admin ${username} and all editors blocked` });
 };
 
 // 🔓 PUT /auth/unblock/:username
 export const unblockAdmin = async (req: AuthRequest, res: Response) => {
   const username = req.params.username;
   const adminRepo = AppDataSource.getRepository(Admin);
-  const target = await adminRepo.findOneBy({ username });
+  const target = await adminRepo.findOne({
+    where: { username },
+    relations: ["createdEditorAdmins"],
+  });
 
   if (!target || target.role !== "admin") {
     return res.status(404).json({ message: "Admin not found" });
   }
 
   target.isBlocked = false;
-  await adminRepo.save(target);
-  res.json({ message: `Admin ${username} unblocked` });
+  // 👉 Розблоковуємо всіх editor'ів
+  for (const editor of target.createdEditorAdmins) {
+    editor.isBlocked = false;
+  }
+
+  await adminRepo.save([target, ...target.createdEditorAdmins]);
+
+  res.json({ message: `Admin ${username} and all editors unblocked` });
 };
 
 // ❌ DELETE /auth/delete/:username — superadmin може видалити будь-кого, admin — себе або своїх editor'ів
