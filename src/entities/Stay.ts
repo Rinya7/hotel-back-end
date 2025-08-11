@@ -1,4 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from "typeorm";
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from "typeorm";
 import { Room } from "./Room";
 
 @Entity()
@@ -6,7 +13,7 @@ export class Stay {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @ManyToOne(() => Room, (room) => room.stays)
+  @ManyToOne(() => Room, (room) => room.stays, { onDelete: "CASCADE" })
   room!: Room;
 
   @Column()
@@ -24,6 +31,12 @@ export class Stay {
   @Column({ type: "decimal", default: 0 })
   balance!: number;
 
-  @Column({ default: "free" }) // або "booked", "occupied"
-  status!: "free" | "booked" | "occupied";
+  @Column({ default: "booked" })
+  status!: "booked" | "occupied" | "completed" | "cancelled";
+
+  @CreateDateColumn()
+  createdAt!: Date;
+
+  @UpdateDateColumn()
+  updatedAt!: Date;
 }

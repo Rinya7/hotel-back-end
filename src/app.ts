@@ -3,6 +3,7 @@ import { json } from "express";
 import dotenv from "dotenv";
 import authRoutes from "./routes/auth.routes";
 import roomRoutes from "./routes/roomRoutes";
+import stayRoutes from "./routes/stayRoutes";
 
 dotenv.config(); // зчитує змінні з .env
 
@@ -17,5 +18,6 @@ app.get("/", (_req, res) => {
 
 app.use("/auth", authRoutes);
 app.use("/rooms", roomRoutes);
+app.use("/stays", stayRoutes);
 
 export default app;

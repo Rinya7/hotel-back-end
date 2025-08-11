@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import { AppDataSource } from "../config/data-source";
 import { Room } from "../entities/Room";
 import { AuthRequest } from "../middlewares/authMiddleware";
@@ -14,15 +14,18 @@ export const getAllRooms = async (req: AuthRequest, res: Response) => {
   res.json(rooms);
 };
 
-// GET /rooms
+// GET /rooms - всі кімнати поточного адміна/editor
 export const getRooms = async (req: AuthRequest, res: Response) => {
   const adminId = req.user!.adminId;
   const roomRepo = AppDataSource.getRepository(Room);
-  const rooms = await roomRepo.find({ where: { admin: { id: adminId } } });
+  const rooms = await roomRepo.find({
+    where: { admin: { id: adminId } },
+    order: { roomNumber: "ASC" },
+  });
   res.json(rooms);
 };
 
-// POST /rooms
+// POST /rooms - створення нової кімнати
 export const createRoom = async (req: AuthRequest, res: Response) => {
   const adminId = req.user!.adminId;
   const {
@@ -47,10 +50,17 @@ export const createRoom = async (req: AuthRequest, res: Response) => {
   room.admin = { id: adminId } as any;
 
   const saved = await AppDataSource.getRepository(Room).save(room);
-  res.status(201).json(saved);
+  res.status(201).json({
+    message: `Room ${roomNumber} created successfully`,
+    roomId: saved.id,
+    number: saved.roomNumber,
+    floor: saved.floor,
+    capacity: saved.capacity,
+    status: saved.status,
+  });
 };
 
-// PUT /number/:roomNumber
+// PUT /number/:roomNumber - повне редагування кімнати
 export const updateRoom = async (req: AuthRequest, res: Response) => {
   const adminId = req.user!.adminId;
   const roomNumber = req.params.roomNumber;
@@ -61,15 +71,21 @@ export const updateRoom = async (req: AuthRequest, res: Response) => {
   });
 
   if (!room) {
-    return res.status(404).json({ message: "Room not found" });
+    return res.status(404).json({ message: `Room ${roomNumber} not found` });
   }
 
   Object.assign(room, req.body);
   const updated = await roomRepo.save(room);
-  res.json(updated);
+  res.json({
+    message: `Room ${roomNumber} updated successfully`,
+    number: updated.roomNumber,
+    floor: updated.floor,
+    capacity: updated.capacity,
+    status: updated.status,
+  });
 };
 
-// PUT /number/:roomNumber/status
+// PUT /number/:roomNumber/status - оновлення статусу кімнати
 export const updateRoomStatus = async (req: AuthRequest, res: Response) => {
   const adminId = req.user!.adminId;
   const roomNumber = req.params.roomNumber;
@@ -84,15 +100,19 @@ export const updateRoomStatus = async (req: AuthRequest, res: Response) => {
   });
 
   if (!room) {
-    return res.status(404).json({ message: "Room not found" });
+    return res.status(404).json({ message: `Room ${roomNumber} not found` });
   }
 
   room.status = status;
   const updated = await roomRepo.save(room);
-  res.json(updated);
+  res.json({
+    message: `Room ${roomNumber} status updated to '${status}'`,
+    number: updated.roomNumber,
+    status: updated.status,
+  });
 };
 
-// DELETE /number/:roomNumber
+// DELETE /number/:roomNumber - видалення кімнати
 export const deleteRoom = async (req: AuthRequest, res: Response) => {
   const adminId = req.user!.adminId;
   const roomNumber = req.params.roomNumber;
@@ -103,9 +123,12 @@ export const deleteRoom = async (req: AuthRequest, res: Response) => {
   });
 
   if (!room) {
-    return res.status(404).json({ message: "Room not found" });
+    return res.status(404).json({ message: `Room ${roomNumber} not found` });
   }
 
   await roomRepo.remove(room);
-  res.json({ message: "Room deleted" });
+  res.json({
+    message: `Room ${roomNumber} deleted successfully`,
+    number: roomNumber,
+  });
 };

@@ -13,7 +13,7 @@ export class Room {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @ManyToOne(() => Admin, (admin) => admin.rooms)
+  @ManyToOne(() => Admin, (admin) => admin.rooms, { onDelete: "CASCADE" })
   admin!: Admin;
 
   @Column({ unique: true }) // 👈 тепер це унікальне поле, яке вводиться вручну

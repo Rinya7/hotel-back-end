@@ -4,6 +4,7 @@ import { Admin } from "../entities/Admin";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { AuthRequest } from "../middlewares/authMiddleware";
+import { copyHotelDataFromAdmin } from "../utils/copyHotelDataFromAdmin";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
@@ -12,10 +13,22 @@ export const createAdminBySuperadmin = async (
   req: AuthRequest,
   res: Response
 ) => {
-  const { username, password, confirmPassword } = req.body;
+  const {
+    username,
+    password,
+    confirmPassword,
+    hotel_name,
+    address,
+    full_name,
+    phone,
+    email,
+  } = req.body;
 
-  if (!username || !password || !confirmPassword) {
-    return res.status(400).json({ message: "All fields are required" });
+  if (!username || !password || !confirmPassword || !hotel_name || !address) {
+    return res.status(400).json({
+      message:
+        "username, password, confirmPassword, hotel_name and address are required",
+    });
   }
 
   if (password !== confirmPassword) {
@@ -36,14 +49,21 @@ export const createAdminBySuperadmin = async (
     password: hashedPassword,
     role: "admin",
     isBlocked: false,
+    hotel_name,
+    address,
+    full_name,
+    phone,
+    email,
   });
 
   const saved = await adminRepo.save(newAdmin);
 
-  res
-    .status(201)
-    .json({ message: "Admin created successfully", adminId: saved.id });
+  res.status(201).json({
+    message: `Admin "${saved.username}" created successfully`,
+    adminId: saved.id,
+  });
 };
+
 // 🔐 GET /auth/users — superadmin бачив усіх admin + їх editor'ів або admin бачив лише своїх editor'ів
 export const getUsers = async (req: AuthRequest, res: Response) => {
   const adminRepo = AppDataSource.getRepository(Admin);
@@ -95,20 +115,37 @@ export const loginAdmin = async (req: Request, res: Response) => {
     return res.status(401).json({ message: "Invalid credentials" });
   }
 
-  const token = jwt.sign({ adminId: admin.id, role: admin.role }, JWT_SECRET, {
-    expiresIn: "48h",
-  });
+  // 👇 КЛЮЧЕВОЕ: для editor кладём adminId = id владельца отеля (createdBy.id)
+  const ownerAdminId = admin.role === "editor" ? admin.createdBy!.id : admin.id;
+
+  const token = jwt.sign(
+    {
+      adminId: ownerAdminId, // используется контроллерами rooms/stays
+      role: admin.role, // 'superadmin' | 'admin' | 'editor'
+      sub: admin.id, // фактический пользователь (кто залогинился)
+    },
+    JWT_SECRET,
+    { expiresIn: "48h" }
+  );
 
   res.json({ token });
 };
 
 // 🔐 POST /auth/create-editor — створення редактора
 export const createEditorAdmin = async (req: AuthRequest, res: Response) => {
-  const { username, password, confirmPassword } = req.body;
+  const { username, password, confirmPassword, full_name, phone, email } =
+    req.body;
   const creatorId = req.user!.adminId;
 
+  // только admin может создавать редакторов
+  if (req.user!.role !== "admin") {
+    return res.status(403).json({ message: "Only admin can create editors" });
+  }
+
   if (!username || !password || !confirmPassword) {
-    return res.status(400).json({ message: "All fields are required" });
+    return res
+      .status(400)
+      .json({ message: "username, password and confirmPassword are required" });
   }
 
   if (password !== confirmPassword) {
@@ -116,6 +153,13 @@ export const createEditorAdmin = async (req: AuthRequest, res: Response) => {
   }
 
   const adminRepo = AppDataSource.getRepository(Admin);
+
+  // 🔹 Получаем данные админа, который создаёт editor
+  const creatorAdmin = await adminRepo.findOneBy({ id: creatorId });
+
+  if (!creatorAdmin) {
+    return res.status(404).json({ message: "Creator admin not found" });
+  }
   const existing = await adminRepo.findOneBy({ username });
 
   if (existing) {
@@ -124,20 +168,34 @@ export const createEditorAdmin = async (req: AuthRequest, res: Response) => {
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
+  // Используем helper для копирования данных отеля
+  const hotelData = copyHotelDataFromAdmin(creatorAdmin);
+
+  // Создаём нового редактора с данными отеля и создателя
   const newEditor = adminRepo.create({
     username,
     password: hashedPassword,
     role: "editor",
-    createdBy: { id: creatorId } as any, // 👈 встановлюємо хто створив
+    createdBy: { id: creatorId } as any,
+    full_name,
+    phone,
+    email,
+    ...hotelData,
   });
 
   const saved = await adminRepo.save(newEditor);
 
-  const token = jwt.sign({ adminId: saved.id, role: saved.role }, JWT_SECRET, {
-    expiresIn: "48h",
-  });
+  // 👇 ВАЖНО: adminId = creatorId (власник готелю), sub = id редактора
+  const token = jwt.sign(
+    { adminId: creatorId, role: saved.role, sub: saved.id },
+    JWT_SECRET,
+    { expiresIn: "48h" }
+  );
 
-  res.status(201).json({ token });
+  res.status(201).json({
+    message: `Editor "${saved.username}" created successfully`,
+    token,
+  });
 };
 
 // 🔒 PUT /auth/block/:username
@@ -188,7 +246,8 @@ export const unblockAdmin = async (req: AuthRequest, res: Response) => {
 
 // ❌ DELETE /auth/delete/:username — superadmin може видалити будь-кого, admin — себе або своїх editor'ів
 export const deleteAdminOrEditor = async (req: AuthRequest, res: Response) => {
-  const requesterId = req.user!.adminId;
+  const requesterId = req.user!.sub; // фактически вошедший
+  const ownerId = req.user!.adminId; // владелец отеля
   const requesterRole = req.user!.role;
   const usernameToDelete = req.params.username;
 
@@ -205,21 +264,26 @@ export const deleteAdminOrEditor = async (req: AuthRequest, res: Response) => {
   if (requesterRole === "superadmin") {
     // superadmin може видалити будь-кого
     await adminRepo.remove(targetUser);
-    return res.json({ message: "User deleted by superadmin" });
+    return res.json({
+      message: `User "${usernameToDelete}" deleted by superadmin`,
+    });
   }
 
   if (requesterRole === "editor") {
     return res.status(403).json({ message: "Editors cannot delete accounts" });
   }
 
-  // admin може видалити себе або editor'а, якого створив
-  const isSelf = targetUser.id === requesterId;
-  const isCreatedByHim = targetUser.createdBy?.id === requesterId;
+  // admin не может удалить самого себя
+  if (targetUser.id === requesterId) {
+    return res.status(403).json({ message: "Admin cannot delete own account" });
+  }
 
-  if (!isSelf && !isCreatedByHim) {
+  // admin может удалить только своего editor'а
+  const isCreatedByHim = targetUser.createdBy?.id === ownerId;
+  if (!isCreatedByHim) {
     return res.status(403).json({ message: "Access denied" });
   }
 
   await adminRepo.remove(targetUser);
-  res.json({ message: "User deleted successfully" });
+  res.json({ message: `User "${usernameToDelete}" deleted successfully` });
 };

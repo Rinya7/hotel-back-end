@@ -6,7 +6,10 @@
   "scripts": {
     "start": "ts-node src/index.ts",
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "db:gen:init": "typeorm-ts-node-commonjs migration:generate src/migrations/init_schema -d src/config/data-source.ts",
+    "db:migrate": "typeorm-ts-node-commonjs migration:run -d src/config/data-source.ts",
+    "seed:superadmin": "ts-node src/seeds/seedSuperadmin.ts"
   },
   "keywords": [],
   "author": "",
