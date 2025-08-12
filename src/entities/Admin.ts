@@ -1,11 +1,15 @@
+// src/entities/Admin.ts
 import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
   OneToMany,
   ManyToOne,
+  CreateDateColumn,
+  UpdateDateColumn,
 } from "typeorm";
 import { Room } from "./Room";
+import { ROLES, Role } from "../auth/roles";
 
 @Entity()
 export class Admin {
@@ -19,12 +23,8 @@ export class Admin {
   password!: string;
 
   // Роль: 'admin' = головний, 'editor' = помічник
-  @Column({
-    type: "enum",
-    enum: ["superadmin", "admin", "editor"],
-    default: "admin",
-  })
-  role!: "superadmin" | "admin" | "editor";
+  @Column({ type: "enum", enum: Object.values(ROLES), default: ROLES.ADMIN })
+  role!: Role;
 
   // для супер-адміна тримаємо nullable, але в сиді все одно заповнимо
   @Column({ nullable: true }) hotel_name?: string;
@@ -56,4 +56,7 @@ export class Admin {
 
   @Column({ default: false })
   isBlocked!: boolean;
+
+  @CreateDateColumn() createdAt!: Date;
+  @UpdateDateColumn() updatedAt!: Date;
 }

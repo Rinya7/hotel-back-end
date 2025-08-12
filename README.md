@@ -109,3 +109,10 @@ npm run db:migrate
 Засеять супер-админа:
 npm run seed:superadmin
 Закоммить файл миграции в репозиторий. В следующий раз достаточно сценария из секции №1.
+
+"db:show": "typeorm-ts-node-commonjs migration:show -d src/config/data-source.ts",
+"db:seed": "ts-node src/seeds/seed.ts",
+"db:seed:rooms": "ts-node src/seeds/seedRooms.ts",
+"db:seed:stays": "ts-node src/seeds/seedStays.ts",
+"db:seed:admins": "ts-node src/seeds/seedAdmins.ts",
+"db:seed:users": "ts-node src/seeds/seedUsers.ts",

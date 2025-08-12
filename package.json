@@ -9,6 +9,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "db:gen:init": "typeorm-ts-node-commonjs migration:generate src/migrations/init_schema -d src/config/data-source.ts",
     "db:migrate": "typeorm-ts-node-commonjs migration:run -d src/config/data-source.ts",
+    "db:revert": "typeorm-ts-node-commonjs migration:revert -d src/config/data-source.ts",
     "seed:superadmin": "ts-node src/seeds/seedSuperadmin.ts"
   },
   "keywords": [],

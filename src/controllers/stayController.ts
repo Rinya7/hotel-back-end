@@ -1,11 +1,12 @@
-// controllers/stayController.ts
+// src/controllers/stayController.ts
 import { Response } from "express";
 import { AppDataSource } from "../config/data-source";
 import { Room } from "../entities/Room";
 import { Stay } from "../entities/Stay";
 import { AuthRequest } from "../middlewares/authMiddleware";
 
-// 🆕 Статистика по отелю (для дашборда)
+// Отримати статистику по кімнатах поточного адміна
+// GET /rooms/stats
 export const getRoomStats = async (req: AuthRequest, res: Response) => {
   const adminId = req.user!.adminId;
   const roomRepo = AppDataSource.getRepository(Room);
@@ -26,7 +27,11 @@ export const getRoomStats = async (req: AuthRequest, res: Response) => {
   res.json(stats);
 };
 
-// 🆕 Текущие заселения/брони
+// Отримати всі активні заселення/броні поточного адміна
+// GET /rooms/stays/current
+// (для дашборда, всі активні Stay, які не completed/cancelled)
+// (для адміна/editor)
+
 export const getCurrentStays = async (req: AuthRequest, res: Response) => {
   const adminId = req.user!.adminId;
   const stayRepo = AppDataSource.getRepository(Stay);
@@ -42,7 +47,8 @@ export const getCurrentStays = async (req: AuthRequest, res: Response) => {
   res.json(stays);
 };
 
-// Создать бронь или заселение
+// Створення броні/заселення по кімнаті
+// POST /rooms/number/:roomNumber/stays
 export const createStayForRoom = async (req: AuthRequest, res: Response) => {
   const { roomNumber } = req.params;
   const { mainGuestName, extraGuestNames, checkIn, checkOut, balance, status } =
@@ -91,7 +97,9 @@ export const createStayForRoom = async (req: AuthRequest, res: Response) => {
 
   await stayRepo.save(stay);
 
-  // статус комнаты автоматически по Stay
+  //Статус кімнати
+  // Якщо бронь/заселення booked/occupied, то статус кімнати booked
+  // Якщо бронь/заселення completed/cancelled, то статус кімнати free
   const roomStatusFromStay: Record<Stay["status"], Room["status"]> = {
     booked: "booked",
     occupied: "occupied",
@@ -107,9 +115,9 @@ export const createStayForRoom = async (req: AuthRequest, res: Response) => {
   });
 };
 
-// Редактировать бронь/заселение (данные и даты)
-// PUT /rooms/:roomNumber/stays?checkIn=YYYY-MM-DD&checkOut=YYYY-MM-DD
-// body: { mainGuestName, extraGuestNames, newCheckIn, newCheckOut, balance }
+//Редагувати бронь/заселення
+// PUT /rooms/number/:roomNumber/stays?checkIn=YYYY-MM-DD&checkOut=YYYY-MM-DD
+// body: { mainGuestName, extraGuestNames, newCheckIn, newCheckOut
 export const updateStayByDates = async (req: AuthRequest, res: Response) => {
   const { roomNumber } = req.params;
   const { checkIn, checkOut } = req.query as {
@@ -173,9 +181,9 @@ export const updateStayByDates = async (req: AuthRequest, res: Response) => {
   res.json({ message: `Stay updated`, stay: saved });
 };
 
-// Закрыть/отменить бронь/заселение
-// PUT /rooms/:roomNumber/stays/close?checkIn=YYYY-MM-DD&checkOut=YYYY-MM-DD
-// body: { status: "completed" | "cancelled" }
+//Закрити бронь/заселення
+// PUT /rooms/number/:roomNumber/stays/close?checkIn=YYYY-MM-DD&checkOut=YYYY-MM-DD
+// body: { status } (completed/cancelled)
 export const closeStay = async (req: AuthRequest, res: Response) => {
   const { roomNumber } = req.params;
   const { checkIn, checkOut } = req.query as {
@@ -211,8 +219,9 @@ export const closeStay = async (req: AuthRequest, res: Response) => {
   stay.status = status as Stay["status"];
   await stayRepo.save(stay);
 
-  // проверка — есть ли ещё активные брони/заселения
-  //  Если нет, то меняем статус комнаты на "free"
+  //   Якщо залишились активні заселення/броні в цій кімнаті, то статус не змінюємо
+  // Якщо ж не залишилось, то статус кімнати free
+  // (якщо статус Stay completed/cancelled, то статус кімнати free)
   const activeLeft = await stayRepo
     .createQueryBuilder("s")
     .leftJoin("s.room", "r")
@@ -228,8 +237,8 @@ export const closeStay = async (req: AuthRequest, res: Response) => {
   res.json({ message: `Stay for room ${roomNumber} closed as ${status}` });
 };
 
-// История проживаний по номеру
-// GET /rooms/:roomNumber/stays?from=YYYY-MM-DD&to=YYYY-MM-DD
+//Історія по конкретній кімнаті
+// GET /rooms/number/:roomNumber/stays
 export const getStaysForRoom = async (req: AuthRequest, res: Response) => {
   const { roomNumber } = req.params;
   const { from, to } = req.query as { from?: string; to?: string };

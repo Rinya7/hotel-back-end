@@ -1,3 +1,4 @@
+// src/controllers/auth.controller.ts
 import { Request, Response } from "express";
 import { AppDataSource } from "../config/data-source";
 import { Admin } from "../entities/Admin";

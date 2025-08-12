@@ -1,3 +1,4 @@
+// src/routes/roomRoutes.ts
 import { Router } from "express";
 import {
   getAllRooms,

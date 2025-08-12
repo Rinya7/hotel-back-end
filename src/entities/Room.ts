@@ -1,3 +1,4 @@
+// src/entities/Room.ts
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -5,6 +6,8 @@ import {
   ManyToOne,
   OneToMany,
   Unique,
+  CreateDateColumn,
+  UpdateDateColumn,
 } from "typeorm";
 import { Stay } from "./Stay";
 import { Admin } from "./Admin";
@@ -48,4 +51,6 @@ export class Room {
 
   @OneToMany(() => Stay, (stay) => stay.room)
   stays!: Stay[];
+  @CreateDateColumn() createdAt!: Date;
+  @UpdateDateColumn() updatedAt!: Date;
 }

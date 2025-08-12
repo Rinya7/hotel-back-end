@@ -1,4 +1,4 @@
-// routes/stay.routes.ts
+// routes/stayRoutes.ts
 import { Router } from "express";
 import {
   getCurrentStays,

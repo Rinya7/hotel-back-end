@@ -1,4 +1,4 @@
-// controllers/roomAvailabilityController.ts
+//   src/controllers/roomAvailabilityController.ts
 import { Response } from "express";
 import { AppDataSource } from "../config/data-source";
 import { Room } from "../entities/Room";
