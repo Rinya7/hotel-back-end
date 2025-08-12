@@ -28,10 +28,14 @@ export class Stay {
   @Column({ type: "date" })
   checkOut!: Date;
 
-  @Column({ type: "decimal", default: 0 })
-  balance!: number;
+  @Column({ type: "numeric", precision: 10, scale: 2, default: 0 })
+  balance!: string; // Postgres numeric → приходит строкой, на фронте приводим к number
 
-  @Column({ default: "booked" })
+  @Column({
+    type: "enum",
+    enum: ["booked", "occupied", "completed", "cancelled"],
+    default: "booked",
+  })
   status!: "booked" | "occupied" | "completed" | "cancelled";
 
   @CreateDateColumn()

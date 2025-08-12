@@ -18,6 +18,6 @@ app.get("/", (_req, res) => {
 
 app.use("/auth", authRoutes);
 app.use("/rooms", roomRoutes);
-app.use("/stays", stayRoutes);
+app.use("/rooms", stayRoutes);
 
 export default app;

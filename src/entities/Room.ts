@@ -4,11 +4,13 @@ import {
   Column,
   ManyToOne,
   OneToMany,
+  Unique,
 } from "typeorm";
 import { Stay } from "./Stay";
 import { Admin } from "./Admin";
 
 @Entity()
+@Unique(["admin", "roomNumber"]) // ✅ уникальность в рамках отеля
 export class Room {
   @PrimaryGeneratedColumn()
   id!: number;
@@ -16,7 +18,7 @@ export class Room {
   @ManyToOne(() => Admin, (admin) => admin.rooms, { onDelete: "CASCADE" })
   admin!: Admin;
 
-  @Column({ unique: true }) // 👈 тепер це унікальне поле, яке вводиться вручну
+  @Column()
   roomNumber!: string;
 
   @Column()
@@ -37,7 +39,11 @@ export class Room {
   @Column({ nullable: true })
   mapPosition!: string;
 
-  @Column({ default: "free" })
+  @Column({
+    type: "enum",
+    enum: ["free", "booked", "occupied"],
+    default: "free",
+  })
   status!: "free" | "booked" | "occupied";
 
   @OneToMany(() => Stay, (stay) => stay.room)
