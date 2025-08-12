@@ -66,27 +66,77 @@ export const createAdminBySuperadmin = async (
 };
 
 // 🔐 GET /auth/users — superadmin бачив усіх admin + їх editor'ів або admin бачив лише своїх editor'ів
+// 🔐 GET /auth/users — superadmin: тільки адміни + їх editors; admin: лише свої editors
 export const getUsers = async (req: AuthRequest, res: Response) => {
   const adminRepo = AppDataSource.getRepository(Admin);
   const { adminId, role } = req.user!;
 
+  // редактор не має доступу
   if (role === "editor") {
     return res.status(403).json({ message: "Editors cannot access user list" });
   }
 
+  // superadmin → тільки адміни (без editor), але з вкладеними editor’ами
   if (role === "superadmin") {
-    const all = await adminRepo.find({
-      relations: ["createdBy"],
-      order: { role: "ASC" },
+    const admins = await adminRepo.find({
+      where: { role: "admin" },
+      relations: ["createdEditorAdmins"],
+      order: { username: "ASC" },
     });
-    return res.json(all);
+
+    // Приберемо password і повернемо editors вкладено
+    const data = admins.map((a) => ({
+      id: a.id,
+      username: a.username,
+      role: a.role,
+      hotel_name: a.hotel_name,
+      address: a.address,
+      full_name: a.full_name,
+      logo_url: a.logo_url,
+      phone: a.phone,
+      email: a.email,
+      isBlocked: a.isBlocked,
+      createdAt: a.createdAt,
+      updatedAt: a.updatedAt,
+      editorsCount: a.createdEditorAdmins?.length ?? 0,
+      editors: (a.createdEditorAdmins || []).map((e) => ({
+        id: e.id,
+        username: e.username,
+        role: e.role, // завжди "editor"
+        full_name: e.full_name,
+        phone: e.phone,
+        email: e.email,
+        isBlocked: e.isBlocked,
+        createdAt: e.createdAt,
+        updatedAt: e.updatedAt,
+        // Нічого зайвого (без password, без createdBy)
+      })),
+    }));
+
+    return res.json(data);
   }
 
+  // admin → як і було: тільки свої редактори плоским списком (або хочеш — можу зробити з блоком self + editors)
   if (role === "admin") {
     const editors = await adminRepo.find({
       where: { createdBy: { id: adminId }, role: "editor" },
+      order: { username: "ASC" },
     });
-    return res.json(editors);
+
+    // Прибрати password
+    const data = editors.map((e) => ({
+      id: e.id,
+      username: e.username,
+      role: e.role, // "editor"
+      full_name: e.full_name,
+      phone: e.phone,
+      email: e.email,
+      isBlocked: e.isBlocked,
+      createdAt: e.createdAt,
+      updatedAt: e.updatedAt,
+    }));
+
+    return res.json(data);
   }
 };
 
