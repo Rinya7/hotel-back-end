@@ -1,8 +1,8 @@
-// src/migrations/17xxxxx-room-unique-by-admin.ts
+// src/migrations/1754930036131-room-unique-by-admin.ts
 import { MigrationInterface, QueryRunner } from "typeorm";
 
-export class RoomUniqueByAdmin17xxxxx implements MigrationInterface {
-  name = "RoomUniqueByAdmin17xxxxx";
+export class RoomUniqueByAdmin1754930036131 implements MigrationInterface {
+  name = "RoomUniqueByAdmin1754930036131";
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // снять старый уникальный констрейнт на roomNumber

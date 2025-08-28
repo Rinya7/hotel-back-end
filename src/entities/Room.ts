@@ -8,12 +8,15 @@ import {
   Unique,
   CreateDateColumn,
   UpdateDateColumn,
+  Check,
 } from "typeorm";
 import { Stay } from "./Stay";
 import { Admin } from "./Admin";
 
 @Entity()
 @Unique(["admin", "roomNumber"]) // ✅ уникальность в рамках отеля
+@Check(`"checkInHour" IS NULL OR ("checkInHour" BETWEEN 0 AND 23)`)
+@Check(`"checkOutHour" IS NULL OR ("checkOutHour" BETWEEN 0 AND 23)`)
 export class Room {
   @PrimaryGeneratedColumn()
   id!: number;
@@ -49,8 +52,16 @@ export class Room {
   })
   status!: "free" | "booked" | "occupied";
 
+  /** Per-room policy hours (overrides admin). NULL -> use admin. */
+  @Column({ type: "int", nullable: true })
+  checkInHour?: number | null;
+
+  @Column({ type: "int", nullable: true })
+  checkOutHour?: number | null;
+
   @OneToMany(() => Stay, (stay) => stay.room)
   stays!: Stay[];
+
   @CreateDateColumn() createdAt!: Date;
   @UpdateDateColumn() updatedAt!: Date;
 }

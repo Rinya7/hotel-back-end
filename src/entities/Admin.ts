@@ -7,11 +7,14 @@ import {
   ManyToOne,
   CreateDateColumn,
   UpdateDateColumn,
+  Check,
 } from "typeorm";
 import { Room } from "./Room";
 import { ROLES, Role } from "../auth/roles";
 
 @Entity()
+@Check(`"checkInHour" >= 0 AND "checkInHour" <= 23`)
+@Check(`"checkOutHour" >= 0 AND "checkOutHour" <= 23`)
 export class Admin {
   @PrimaryGeneratedColumn()
   id!: number;
@@ -56,6 +59,13 @@ export class Admin {
 
   @Column({ default: false })
   isBlocked!: boolean;
+
+  /** ⬇️ NEW: Hotel policy hours (per hotel / main admin) */
+  @Column({ type: "int", default: 14 })
+  checkInHour!: number; // 0..23
+
+  @Column({ type: "int", default: 10 })
+  checkOutHour!: number; // 0..23
 
   @CreateDateColumn() createdAt!: Date;
   @UpdateDateColumn() updatedAt!: Date;

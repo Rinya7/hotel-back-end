@@ -6,14 +6,27 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { AuthRequest } from "../middlewares/authMiddleware";
 import { copyHotelDataFromAdmin } from "../utils/copyHotelDataFromAdmin";
+import type { LoginRequestDto, LoginResponseDto } from "../dto/auth.dto";
+import { ROLES, Role } from "../auth/roles";
+import { isHour, isHourOptional } from "../utils/hours";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
-// 🔐 POST /auth/create-admin — тільки для superadmin
+/**
+ * 🔐 POST /auth/create-admin — superadmin only
+ * Body:
+ *  - username, password, confirmPassword, hotel_name, address, ...
+ *  - checkInHour?: number(0..23)
+ *  - checkOutHour?: number(0..23)
+ */
 export const createAdminBySuperadmin = async (
   req: AuthRequest,
   res: Response
 ) => {
+  // ❗ Safety check: even if route is protected by middleware, double-check role here.
+  if (!req.user || req.user.role !== ROLES.SUPER) {
+    return res.status(403).json({ message: "Superadmin only" });
+  }
   const {
     username,
     password,
@@ -23,7 +36,20 @@ export const createAdminBySuperadmin = async (
     full_name,
     phone,
     email,
-  } = req.body;
+    checkInHour,
+    checkOutHour,
+  } = req.body as {
+    username: string;
+    password: string;
+    confirmPassword: string;
+    hotel_name: string;
+    address: string;
+    full_name?: string;
+    phone?: string;
+    email?: string;
+    checkInHour?: number;
+    checkOutHour?: number;
+  };
 
   if (!username || !password || !confirmPassword || !hotel_name || !address) {
     return res.status(400).json({
@@ -36,6 +62,13 @@ export const createAdminBySuperadmin = async (
     return res.status(400).json({ message: "Passwords do not match" });
   }
 
+  // Optional policy hours validation (0..23 if provided)
+  if (!isHourOptional(checkInHour) || !isHourOptional(checkOutHour)) {
+    return res
+      .status(400)
+      .json({ message: "checkInHour/checkOutHour must be integers in 0..23" });
+  }
+
   const adminRepo = AppDataSource.getRepository(Admin);
   const existing = await adminRepo.findOneBy({ username });
 
@@ -45,16 +78,20 @@ export const createAdminBySuperadmin = async (
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
+  // Create entity with hotel defaults.
+  // If hours provided → override; else entity defaults (14/10) will be used.
   const newAdmin = adminRepo.create({
     username,
     password: hashedPassword,
-    role: "admin",
+    role: ROLES.ADMIN,
     isBlocked: false,
     hotel_name,
     address,
     full_name,
     phone,
     email,
+    ...(typeof checkInHour !== "undefined" ? { checkInHour } : {}),
+    ...(typeof checkOutHour !== "undefined" ? { checkOutHour } : {}),
   });
 
   const saved = await adminRepo.save(newAdmin);
@@ -62,24 +99,32 @@ export const createAdminBySuperadmin = async (
   res.status(201).json({
     message: `Admin "${saved.username}" created successfully`,
     adminId: saved.id,
+    policy: {
+      checkInHour: saved.checkInHour,
+      checkOutHour: saved.checkOutHour,
+    },
   });
 };
 
-// 🔐 GET /auth/users — superadmin бачив усіх admin + їх editor'ів або admin бачив лише своїх editor'ів
-// 🔐 GET /auth/users — superadmin: тільки адміни + їх editors; admin: лише свої editors
+/**
+ * 🔐 GET /auth/users
+ * - superadmin: returns only hotel admins + nested editors
+ * - admin: returns only their editors
+ * - editor: forbidden
+ */
 export const getUsers = async (req: AuthRequest, res: Response) => {
   const adminRepo = AppDataSource.getRepository(Admin);
   const { adminId, role } = req.user!;
 
   // редактор не має доступу
-  if (role === "editor") {
+  if (role === ROLES.EDITOR) {
     return res.status(403).json({ message: "Editors cannot access user list" });
   }
 
   // superadmin → тільки адміни (без editor), але з вкладеними editor’ами
-  if (role === "superadmin") {
+  if (role === ROLES.SUPER) {
     const admins = await adminRepo.find({
-      where: { role: "admin" },
+      where: { role: ROLES.ADMIN },
       relations: ["createdEditorAdmins"],
       order: { username: "ASC" },
     });
@@ -96,6 +141,8 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
       phone: a.phone,
       email: a.email,
       isBlocked: a.isBlocked,
+      checkInHour: a.checkInHour, // 👈 show hotel policy
+      checkOutHour: a.checkOutHour, // 👈 show hotel policy
       createdAt: a.createdAt,
       updatedAt: a.updatedAt,
       editorsCount: a.createdEditorAdmins?.length ?? 0,
@@ -117,9 +164,9 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
   }
 
   // admin → як і було: тільки свої редактори плоским списком (або хочеш — можу зробити з блоком self + editors)
-  if (role === "admin") {
+  if (role === ROLES.ADMIN) {
     const editors = await adminRepo.find({
-      where: { createdBy: { id: adminId }, role: "editor" },
+      where: { createdBy: { id: adminId }, role: ROLES.EDITOR },
       order: { username: "ASC" },
     });
 
@@ -140,11 +187,19 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// 🔐 POST /auth/login — логін адміна
+/**
+ * 🔐 POST /auth/login — admin or editor login
+ * Payload:
+ *  - For editor: adminId = owner's id (createdBy.id)
+ *  - For admin:  adminId = own id
+ * The same payload shape is preserved for middleware/guards.
+ */
 export const loginAdmin = async (req: Request, res: Response) => {
-  const { username, password } = req.body;
+  const { username, password } = req.body as LoginRequestDto;
 
+  // 1) Шукаємо користувача
   const adminRepository = AppDataSource.getRepository(Admin);
+  // ВАЖЛИВО: тягнемо createdBy, бо для editor потрібен власник готелю
   const admin = await adminRepository.findOne({
     where: { username },
     relations: ["createdBy"],
@@ -153,10 +208,10 @@ export const loginAdmin = async (req: Request, res: Response) => {
   if (!admin) {
     return res.status(401).json({ message: "Invalid credentials" });
   }
-  if (admin.role === "admin" && admin.isBlocked) {
+  if (admin.role === ROLES.ADMIN && admin.isBlocked) {
     return res.status(403).json({ message: "Account is blocked" });
   }
-  if (admin.role === "editor" && admin.createdBy?.isBlocked) {
+  if (admin.role === ROLES.EDITOR && admin.createdBy?.isBlocked) {
     return res
       .status(403)
       .json({ message: "Admin is blocked — editor access denied" });
@@ -167,25 +222,62 @@ export const loginAdmin = async (req: Request, res: Response) => {
   }
 
   // 👇 КЛЮЧЕВОЕ: для editor кладём adminId = id владельца отеля (createdBy.id)
-  const ownerAdminId = admin.role === "editor" ? admin.createdBy!.id : admin.id;
+  const ownerAdminId =
+    admin.role === ROLES.EDITOR ? admin.createdBy!.id : admin.id;
 
+  // ✅ Токен НЕ міняємо — payload залишається тим самим, щоб middleware/контролери працювали як зараз
+  // adminId = id власника готелю (для editor — це його createdBy)
   const token = jwt.sign(
     {
       adminId: ownerAdminId, // используется контроллерами rooms/stays
-      role: admin.role, // 'superadmin' | 'admin' | 'editor'
+      role: admin.role as Role, // 'superadmin' | 'admin' | 'editor'
       sub: admin.id, // фактический пользователь (кто залогинился)
     },
     JWT_SECRET,
     { expiresIn: "48h" }
   );
+  // 🆕 Відповідь: віддаємо профіль для фронта
+  const policy =
+    admin.role === "admin"
+      ? { checkInHour: admin.checkInHour, checkOutHour: admin.checkOutHour }
+      : admin.createdBy
+      ? {
+          checkInHour: admin.createdBy.checkInHour,
+          checkOutHour: admin.createdBy.checkOutHour,
+        }
+      : undefined;
 
-  res.json({ token });
+  const payload: LoginResponseDto = {
+    token,
+    username: admin.username,
+    role: admin.role as Role,
+    adminId: ownerAdminId,
+    // Для admin — беремо своє hotel_name; для editor — hotel_name власника
+    hotelName:
+      admin.role === ROLES.ADMIN
+        ? admin.hotel_name ?? undefined
+        : admin.createdBy?.hotel_name ?? undefined,
+
+    // 👇 при желании можно сразу отдать и часы дефолтов отеля:
+    ...(policy ? { policy } : {}),
+  };
+  return res.json({ payload });
 };
 
-// 🔐 POST /auth/create-editor — створення редактора
+/**
+ * 🔐 POST /auth/create-editor — only admin can create editors
+ * Copies hotel profile (including policy hours) from owner admin.
+ */
 export const createEditorAdmin = async (req: AuthRequest, res: Response) => {
   const { username, password, confirmPassword, full_name, phone, email } =
-    req.body;
+    req.body as {
+      username: string;
+      password: string;
+      confirmPassword: string;
+      full_name?: string;
+      phone?: string;
+      email?: string;
+    };
   const creatorId = req.user!.adminId;
 
   // только admin может создавать редакторов
@@ -220,14 +312,15 @@ export const createEditorAdmin = async (req: AuthRequest, res: Response) => {
   const hashedPassword = await bcrypt.hash(password, 10);
 
   // Используем helper для копирования данных отеля
+  // Copy hotel profile + policy hours from owner
   const hotelData = copyHotelDataFromAdmin(creatorAdmin);
 
   // Создаём нового редактора с данными отеля и создателя
   const newEditor = adminRepo.create({
     username,
     password: hashedPassword,
-    role: "editor",
-    createdBy: { id: creatorId } as any,
+    role: ROLES.EDITOR,
+    createdBy: creatorAdmin,
     full_name,
     phone,
     email,
@@ -249,7 +342,9 @@ export const createEditorAdmin = async (req: AuthRequest, res: Response) => {
   });
 };
 
-// 🔒 PUT /auth/block/:username
+/**
+ * 🔒 PUT /auth/block/:username — block admin and all their editors
+ */
 export const blockAdmin = async (req: AuthRequest, res: Response) => {
   const username = req.params.username;
   const adminRepo = AppDataSource.getRepository(Admin);
@@ -258,7 +353,7 @@ export const blockAdmin = async (req: AuthRequest, res: Response) => {
     relations: ["createdEditorAdmins"],
   });
 
-  if (!target || target.role !== "admin") {
+  if (!target || target.role !== ROLES.ADMIN) {
     return res.status(404).json({ message: "Admin not found" });
   }
 
@@ -271,7 +366,9 @@ export const blockAdmin = async (req: AuthRequest, res: Response) => {
   res.json({ message: `Admin ${username} and all editors blocked` });
 };
 
-// 🔓 PUT /auth/unblock/:username
+/**
+ * 🔓 PUT /auth/unblock/:username — unblock admin and all their editors
+ */
 export const unblockAdmin = async (req: AuthRequest, res: Response) => {
   const username = req.params.username;
   const adminRepo = AppDataSource.getRepository(Admin);
@@ -280,7 +377,7 @@ export const unblockAdmin = async (req: AuthRequest, res: Response) => {
     relations: ["createdEditorAdmins"],
   });
 
-  if (!target || target.role !== "admin") {
+  if (!target || target.role !== ROLES.ADMIN) {
     return res.status(404).json({ message: "Admin not found" });
   }
 
@@ -295,10 +392,15 @@ export const unblockAdmin = async (req: AuthRequest, res: Response) => {
   res.json({ message: `Admin ${username} and all editors unblocked` });
 };
 
-// ❌ DELETE /auth/delete/:username — superadmin може видалити будь-кого, admin — себе або своїх editor'ів
+/**
+ * ❌ DELETE /auth/delete/:username
+ * - superadmin can delete anyone
+ * - admin can delete their editors (not themselves)
+ * - editor cannot delete
+ */
 export const deleteAdminOrEditor = async (req: AuthRequest, res: Response) => {
-  const requesterId = req.user!.sub; // фактически вошедший
-  const ownerId = req.user!.adminId; // владелец отеля
+  const requesterId = req.user!.sub; // actual logged-in user id
+  const ownerId = req.user!.adminId; // hotel owner id
   const requesterRole = req.user!.role;
   const usernameToDelete = req.params.username;
 
@@ -312,7 +414,7 @@ export const deleteAdminOrEditor = async (req: AuthRequest, res: Response) => {
     return res.status(404).json({ message: "User not found" });
   }
 
-  if (requesterRole === "superadmin") {
+  if (requesterRole === ROLES.SUPER) {
     // superadmin може видалити будь-кого
     await adminRepo.remove(targetUser);
     return res.json({
@@ -320,7 +422,7 @@ export const deleteAdminOrEditor = async (req: AuthRequest, res: Response) => {
     });
   }
 
-  if (requesterRole === "editor") {
+  if (requesterRole === ROLES.EDITOR) {
     return res.status(403).json({ message: "Editors cannot delete accounts" });
   }
 

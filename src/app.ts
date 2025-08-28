@@ -8,6 +8,8 @@ import authRoutes from "./routes/auth.routes";
 import roomRoutes from "./routes/roomRoutes";
 import stayRoutes from "./routes/stayRoutes";
 
+import roomPolicyRoutes from "./routes/roomPolicy.routes";
+
 const app = express();
 // если когда-то будет прокси (nginx), это оставить
 // app.set("trust proxy", 1);
@@ -56,5 +58,7 @@ app.get("/", (_req, res) => {
 app.use("/auth", authRoutes);
 app.use("/rooms", roomRoutes);
 app.use("/rooms", stayRoutes);
+
+app.use(roomPolicyRoutes);
 
 export default app;
