@@ -172,6 +172,38 @@ export const createRoom = async (req: AuthRequest, res: Response) => {
   });
 };
 
+/** GET /rooms/status/:status — list rooms by current Room.status */
+export const getRoomsByStatus = async (req: AuthRequest, res: Response) => {
+  const ownerAdminId = getOwnerAdminId(req);
+  const statusParam = String(req.params.status) as
+    | "free"
+    | "booked"
+    | "occupied";
+
+  if (!["free", "booked", "occupied"].includes(statusParam)) {
+    return res.status(400).json({ message: "Invalid status value" });
+  }
+
+  const rooms = await AppDataSource.getRepository(Room).find({
+    where: { admin: { id: ownerAdminId }, status: statusParam },
+    order: { roomNumber: "ASC" },
+  });
+
+  // Minimal shape for list
+  const items = rooms.map((r) => ({
+    id: r.id,
+    roomNumber: r.roomNumber,
+    floor: r.floor,
+    capacity: r.capacity,
+    status: r.status,
+    // hours shown to operator if needed
+    checkInHour: r.checkInHour,
+    checkOutHour: r.checkOutHour,
+  }));
+
+  return res.json({ count: items.length, items });
+};
+
 /**
  * PUT /number/:roomNumber — full edit for a room
  * Only allows whitelisted fields to change; validates policy hours.

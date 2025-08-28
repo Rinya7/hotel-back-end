@@ -6,18 +6,15 @@ import rateLimit from "express-rate-limit";
 
 import authRoutes from "./routes/auth.routes";
 import roomRoutes from "./routes/roomRoutes";
-import stayRoutes from "./routes/stayRoutes";
+import roomStay from "./routes/roomStay"; // ⬅️ new
+import staysRoutes from "./routes/stayRoutes"; // ⬅️ new
 
 import roomPolicyRoutes from "./routes/roomPolicy.routes";
 
 const app = express();
-// если когда-то будет прокси (nginx), это оставить
-// app.set("trust proxy", 1);
 
-// Безопасные заголовки
 app.use(helmet());
 
-// CORS — в DEV можно origin: true; ниже пример под Vite фронт
 app.use(
   cors({
     origin: ["http://localhost:5173"],
@@ -25,20 +22,17 @@ app.use(
   })
 );
 
-// JSON body parser
 app.use(express.json());
 
-// Общий лимит запросов, чтобы не долбили API
 app.use(
   rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 минут
-    max: 300, // 300 запросов/IP
+    windowMs: 15 * 60 * 1000,
+    max: 300,
     standardHeaders: true,
     legacyHeaders: false,
   })
 );
 
-// Более строгий лимит только на логин
 app.use(
   "/auth/login",
   rateLimit({
@@ -49,16 +43,21 @@ app.use(
   })
 );
 
-// Базовый маршрут (проверка, что жив)
 app.get("/", (_req, res) => {
   res.send("Hotel backend is running!");
 });
 
-// Маршруты
+// ===== Routes =====
 app.use("/auth", authRoutes);
-app.use("/rooms", roomRoutes);
-app.use("/rooms", stayRoutes);
 
+// Rooms: CRUD, status, stats, availability, room-level stays nested
+app.use("/rooms", roomRoutes);
+app.use("/rooms", roomStay);
+
+// Stays: global lists + manual ops by stayId
+app.use("/stays", staysRoutes);
+
+// Bulk policy-hours for rooms (keep if you use mass update of check-in/out hours)
 app.use(roomPolicyRoutes);
 
 export default app;

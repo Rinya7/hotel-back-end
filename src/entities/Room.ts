@@ -33,17 +33,20 @@ export class Room {
   @Column()
   capacity!: number;
 
-  @Column({ nullable: true })
-  wifiName!: string;
+  /** Explicit SQL type is required because TS union (string|null) → design:type = Object */
+  @Column({ type: "varchar", length: 100, nullable: true })
+  wifiName!: string | null;
 
-  @Column({ nullable: true })
-  wifiPassword!: string;
+  @Column({ type: "varchar", length: 100, nullable: true })
+  wifiPassword!: string | null;
 
-  @Column({ nullable: true })
-  qrBarUrl!: string;
+  /** URLs can be long → use text */
+  @Column({ type: "text", nullable: true })
+  qrBarUrl!: string | null;
 
-  @Column({ nullable: true })
-  mapPosition!: string;
+  /** Map position payload can be arbitrary → use text */
+  @Column({ type: "text", nullable: true })
+  mapPosition!: string | null;
 
   @Column({
     type: "enum",
@@ -52,7 +55,7 @@ export class Room {
   })
   status!: "free" | "booked" | "occupied";
 
-  /** Per-room policy hours (overrides admin). NULL -> use admin. */
+  /** Per-room policy hours (override admin). NULL → follow admin defaults */
   @Column({ type: "int", nullable: true })
   checkInHour?: number | null;
 

@@ -1,3 +1,4 @@
+//CRUD комнат, статус комнаты, статистика, availability, фильтр по статусу комнаты.
 // src/routes/roomRoutes.ts
 import { Router } from "express";
 import {
@@ -20,6 +21,7 @@ import {
   getAvailabilityForAllRooms,
   getRoomAvailability,
 } from "../controllers/roomAvailabilityController";
+import { getRoomsByStatus } from "../controllers/roomController";
 
 const router = Router();
 
@@ -85,5 +87,12 @@ router.get(
 // Статистика по кімнатам (весь готель: free/booked/occupied)
 // GET /rooms/stats
 router.get("/stats", authenticateToken, isEditorOrAdmin, getRoomStats);
+
+router.get(
+  "/status/:status",
+  authenticateToken,
+  isEditorOrAdmin,
+  getRoomsByStatus
+);
 
 export default router;
