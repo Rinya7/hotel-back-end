@@ -1,0 +1,58 @@
+# openapi/paths/stay-ops.yaml
+stay_check_in:
+  post:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Ops]
+    summary: Позначити як occupied (ручний check-in)
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              force: { type: boolean }
+    responses:
+      "200":
+        description: OK
+
+stay_check_out:
+  post:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Ops]
+    summary: Позначити як completed (ручний check-out)
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              force: { type: boolean }
+    responses:
+      "200":
+        description: OK
+
+stay_cancel:
+  post:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Ops]
+    summary: Скасувати бронювання (booked → cancelled)
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    responses:
+      "200":
+        description: OK

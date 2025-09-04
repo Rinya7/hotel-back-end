@@ -1,0 +1,88 @@
+# openapi/paths/availability.yaml
+avail_all:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Availability & Stats]
+    summary: Доступність усіх кімнат у діапазоні
+    parameters:
+      - name: from
+        in: query
+        required: true
+        schema: { type: string, format: date }
+      - name: to
+        in: query
+        required: true
+        schema: { type: string, format: date }
+      - name: details
+        in: query
+        required: false
+        schema: { type: string, enum: ["1"] }
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                {
+                  $ref: "../openapi.base.yaml#/components/schemas/AvailabilityItem",
+                }
+      "400":
+        description: Missing from/to
+
+avail_one:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Availability & Stats]
+    summary: Доступність однієї кімнати
+    parameters:
+      - name: roomNumber
+        in: path
+        required: true
+        schema: { type: string }
+      - name: from
+        in: query
+        required: true
+        schema: { type: string, format: date }
+      - name: to
+        in: query
+        required: true
+        schema: { type: string, format: date }
+      - name: details
+        in: query
+        required: false
+        schema: { type: string, enum: ["1"] }
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              {
+                $ref: "../openapi.base.yaml#/components/schemas/AvailabilityItem",
+              }
+      "404":
+        description: Room not found
+
+rooms_stats:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Availability & Stats]
+    summary: Статистика по статусам кімнат
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/RoomsStats" }
+
+stays_current:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Availability & Stats]
+    summary: Усі активні проживання (booked/occupied)
+    responses:
+      "200":
+        description: OK

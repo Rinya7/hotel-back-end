@@ -1,0 +1,135 @@
+# openapi/paths/rooms.yaml
+rooms_all:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Rooms]
+    summary: Усі кімнати по системі (superadmin)
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: "../openapi.base.yaml#/components/schemas/Room" }
+
+rooms_list_and_create:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Rooms]
+    summary: Список кімнат поточного готелю
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: "../openapi.base.yaml#/components/schemas/Room" }
+  post:
+    security: [{ bearerAuth: [] }]
+    tags: [Rooms]
+    summary: Створити кімнату
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            {
+              $ref: "../openapi.base.yaml#/components/schemas/CreateRoomRequest",
+            }
+    responses:
+      "201":
+        description: Created
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/RoomResponse" }
+      "400":
+        description: Validation error
+      "409":
+        description: Duplicate room
+
+rooms_by_status:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Rooms]
+    summary: Кімнати за статусом (free|booked|occupied)
+    parameters:
+      - name: status
+        in: path
+        required: true
+        schema: { $ref: "../openapi.base.yaml#/components/schemas/RoomStatus" }
+    responses:
+      "200":
+        description: OK
+
+rooms_update_delete:
+  put:
+    security: [{ bearerAuth: [] }]
+    tags: [Rooms]
+    summary: Повне редагування кімнати за roomNumber
+    parameters:
+      - name: roomNumber
+        in: path
+        required: true
+        schema: { type: string }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            {
+              $ref: "../openapi.base.yaml#/components/schemas/UpdateRoomRequest",
+            }
+    responses:
+      "200":
+        description: Updated
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/RoomResponse" }
+      "404":
+        description: Not found
+      "409":
+        description: Duplicate room number
+  delete:
+    security: [{ bearerAuth: [] }]
+    tags: [Rooms]
+    summary: Видалити кімнату
+    parameters:
+      - name: roomNumber
+        in: path
+        required: true
+        schema: { type: string }
+    responses:
+      "200":
+        description: Deleted
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/SimpleMessage" }
+      "404":
+        description: Not found
+
+rooms_update_status:
+  put:
+    security: [{ bearerAuth: [] }]
+    tags: [Rooms]
+    summary: Ручна зміна статусу кімнати
+    parameters:
+      - name: roomNumber
+        in: path
+        required: true
+        schema: { type: string }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            {
+              $ref: "../openapi.base.yaml#/components/schemas/RoomStatusUpdateRequest",
+            }
+    responses:
+      "200":
+        description: Updated

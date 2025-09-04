@@ -1,0 +1,170 @@
+# openapi/paths/auth.yaml
+auth_login:
+  post:
+    tags: [Auth]
+    summary: Логін (admin | editor)
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            { $ref: "../openapi.base.yaml#/components/schemas/LoginRequest" }
+          examples:
+            admin:
+              value: { username: "hotel-aurora", password: "S3cure!Pass" }
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/LoginResponse" }
+      "401":
+        description: Invalid credentials
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse" }
+
+auth_create_admin:
+  post:
+    security: [{ bearerAuth: [] }]
+    tags: [Auth]
+    summary: Створити admin (superadmin only)
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            {
+              $ref: "../openapi.base.yaml#/components/schemas/CreateAdminRequest",
+            }
+    responses:
+      "201":
+        description: Created
+        content:
+          application/json:
+            schema:
+              {
+                $ref: "../openapi.base.yaml#/components/schemas/CreateAdminResponse",
+              }
+      "400":
+        description: Validation/duplicate error
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse" }
+      "403":
+        description: Forbidden
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse" }
+
+auth_create_editor:
+  post:
+    security: [{ bearerAuth: [] }]
+    tags: [Auth]
+    summary: Створити editor (admin only)
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            {
+              $ref: "../openapi.base.yaml#/components/schemas/CreateEditorRequest",
+            }
+    responses:
+      "201":
+        description: Created
+        content:
+          application/json:
+            schema:
+              {
+                $ref: "../openapi.base.yaml#/components/schemas/CreateEditorResponse",
+              }
+      "400":
+        description: Validation/duplicate error
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse" }
+      "403":
+        description: Forbidden
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse" }
+
+auth_users:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Auth]
+    summary: Список користувачів
+    responses:
+      "200":
+        description: OK
+      "403":
+        description: Forbidden
+
+auth_block:
+  put:
+    security: [{ bearerAuth: [] }]
+    tags: [Auth]
+    summary: Заблокувати admin та всіх його editors (superadmin)
+    parameters:
+      - name: username
+        in: path
+        required: true
+        schema: { type: string }
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/SimpleMessage" }
+      "404":
+        description: Not found
+
+auth_unblock:
+  put:
+    security: [{ bearerAuth: [] }]
+    tags: [Auth]
+    summary: Розблокувати admin та всіх його editors (superadmin)
+    parameters:
+      - name: username
+        in: path
+        required: true
+        schema: { type: string }
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/SimpleMessage" }
+      "404":
+        description: Not found
+
+auth_delete:
+  delete:
+    security: [{ bearerAuth: [] }]
+    tags: [Auth]
+    summary: Видалити користувача (superadmin — будь-кого; admin — тільки своїх editor'ів)
+    parameters:
+      - name: username
+        in: path
+        required: true
+        schema: { type: string }
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/SimpleMessage" }
+      "403":
+        description: Forbidden
+      "404":
+        description: Not found

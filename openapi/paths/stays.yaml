@@ -1,0 +1,86 @@
+# openapi/paths/stays.yaml
+stays_get_and_post:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Stays]
+    summary: Історія проживань по кімнаті (опційно з фільтром дат)
+    parameters:
+      - name: roomNumber
+        in: path
+        required: true
+        schema: { type: string }
+      - name: from
+        in: query
+        required: false
+        schema: { type: string, format: date }
+      - name: to
+        in: query
+        required: false
+        schema: { type: string, format: date }
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: "../openapi.base.yaml#/components/schemas/Stay" }
+  post:
+    security: [{ bearerAuth: [] }]
+    tags: [Stays]
+    summary: Створити бронювання/заселення
+    parameters:
+      - name: roomNumber
+        in: path
+        required: true
+        schema: { type: string }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            {
+              $ref: "../openapi.base.yaml#/components/schemas/CreateStayForRoomRequest",
+            }
+          examples:
+            create:
+              value:
+                mainGuestName: "Mario Rossi"
+                checkIn: "2025-09-10"
+                checkOut: "2025-09-14"
+                status: "booked"
+    responses:
+      "201":
+        description: Created
+      "409":
+        description: Conflicting dates
+
+stays_close:
+  put:
+    security: [{ bearerAuth: [] }]
+    tags: [Stays]
+    summary: Закрити проживання (completed|cancelled) за ключем дат
+    parameters:
+      - name: roomNumber
+        in: path
+        required: true
+        schema: { type: string }
+      - name: checkIn
+        in: query
+        required: true
+        schema: { type: string, format: date }
+      - name: checkOut
+        in: query
+        required: true
+        schema: { type: string, format: date }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            {
+              $ref: "../openapi.base.yaml#/components/schemas/CloseStayRequest",
+            }
+    responses:
+      "200":
+        description: Closed

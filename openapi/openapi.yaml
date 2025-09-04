@@ -1,0 +1,1216 @@
+openapi: 3.0.3
+info:
+  title: Hotel Backend API
+  version: 1.0.0
+  description: |
+    Модульний OpenAPI. Всі components тут. Кожен шлях підключено через $ref до файла у /openapi/paths/*.yaml, де PathItem зберігається під ключами-ідентифікаторами.
+servers:
+  - url: 'http://localhost:3000'
+    description: Local dev
+tags:
+  - name: Auth
+    description: Логін та керування користувачами
+  - name: Rooms
+    description: 'CRUD, статуси'
+  - name: Policy Hours
+    description: Масові години заселення/виїзду для кімнат
+  - name: Availability & Stats
+    description: 'Доступність, статистика, активні проживання'
+  - name: Stays
+    description: Створення/редагування/закриття/історія проживань
+  - name: Stay Ops
+    description: Ручні check-in/out/cancel
+  - name: Stay Queries
+    description: 'Добірки для дашборда (за статусом, заїзди/виїзди сьогодні)'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+    SimpleMessage:
+      type: object
+      properties:
+        message:
+          type: string
+    Role:
+      type: string
+      enum:
+        - superadmin
+        - admin
+        - editor
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+    LoginPayload:
+      type: object
+      required:
+        - token
+        - username
+        - role
+        - adminId
+      properties:
+        token:
+          type: string
+          description: JWT (48h)
+        username:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        adminId:
+          type: integer
+          description: |
+            Власник готелю: для admin — його id; для editor — id owner admin.
+        hotelName:
+          type: string
+          nullable: true
+        policy:
+          type: object
+          nullable: true
+          properties:
+            checkInHour:
+              type: integer
+              minimum: 0
+              maximum: 23
+            checkOutHour:
+              type: integer
+              minimum: 0
+              maximum: 23
+    LoginResponse:
+      type: object
+      properties:
+        payload:
+          $ref: '#/components/schemas/LoginPayload'
+    CreateAdminRequest:
+      type: object
+      required:
+        - username
+        - password
+        - confirmPassword
+        - hotel_name
+        - address
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        confirmPassword:
+          type: string
+        hotel_name:
+          type: string
+        address:
+          type: string
+        full_name:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        checkInHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          nullable: true
+        checkOutHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          nullable: true
+    CreateAdminResponse:
+      type: object
+      required:
+        - message
+        - adminId
+        - policy
+      properties:
+        message:
+          type: string
+        adminId:
+          type: integer
+        policy:
+          type: object
+          properties:
+            checkInHour:
+              type: integer
+            checkOutHour:
+              type: integer
+    CreateEditorRequest:
+      type: object
+      required:
+        - username
+        - password
+        - confirmPassword
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        confirmPassword:
+          type: string
+        full_name:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+    CreateEditorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        token:
+          type: string
+    PublicAdminUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        hotel_name:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        full_name:
+          type: string
+          nullable: true
+        logo_url:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        isBlocked:
+          type: boolean
+        checkInHour:
+          type: integer
+          nullable: true
+        checkOutHour:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        editorsCount:
+          type: integer
+        editors:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              username:
+                type: string
+              role:
+                $ref: '#/components/schemas/Role'
+              full_name:
+                type: string
+                nullable: true
+              phone:
+                type: string
+                nullable: true
+              email:
+                type: string
+                nullable: true
+              isBlocked:
+                type: boolean
+              createdAt:
+                type: string
+                format: date-time
+              updatedAt:
+                type: string
+                format: date-time
+    PublicEditorUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        full_name:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        isBlocked:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    RoomStatus:
+      type: string
+      enum:
+        - free
+        - booked
+        - occupied
+    Room:
+      type: object
+      properties:
+        id:
+          type: integer
+        roomNumber:
+          type: string
+        floor:
+          type: integer
+        capacity:
+          type: integer
+        status:
+          $ref: '#/components/schemas/RoomStatus'
+        checkInHour:
+          type: integer
+          nullable: true
+        checkOutHour:
+          type: integer
+          nullable: true
+        wifiName:
+          type: string
+          nullable: true
+        wifiPassword:
+          type: string
+          nullable: true
+        qrBarUrl:
+          type: string
+          nullable: true
+        mapPosition:
+          type: string
+          nullable: true
+    CreateRoomRequest:
+      type: object
+      required:
+        - roomNumber
+        - floor
+        - capacity
+      properties:
+        roomNumber:
+          type: string
+        floor:
+          type: integer
+          minimum: 0
+        capacity:
+          type: integer
+          minimum: 0
+        checkInHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          nullable: true
+        checkOutHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          nullable: true
+        wifiName:
+          type: string
+          nullable: true
+        wifiPassword:
+          type: string
+          nullable: true
+        qrBarUrl:
+          type: string
+          nullable: true
+        mapPosition:
+          type: string
+          nullable: true
+    UpdateRoomRequest:
+      type: object
+      properties:
+        roomNumber:
+          type: string
+        floor:
+          type: integer
+          minimum: 0
+        capacity:
+          type: integer
+          minimum: 0
+        checkInHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          nullable: true
+        checkOutHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          nullable: true
+        wifiName:
+          type: string
+          nullable: true
+        wifiPassword:
+          type: string
+          nullable: true
+        qrBarUrl:
+          type: string
+          nullable: true
+        mapPosition:
+          type: string
+          nullable: true
+    RoomResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        room:
+          $ref: '#/components/schemas/Room'
+    RoomStatusUpdateRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          $ref: '#/components/schemas/RoomStatus'
+    RoomsStats:
+      type: object
+      properties:
+        free:
+          type: integer
+        booked:
+          type: integer
+        occupied:
+          type: integer
+    AvailabilityConflict:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+          enum:
+            - booked
+            - occupied
+            - completed
+            - cancelled
+        mainGuestName:
+          type: string
+        checkIn:
+          type: string
+          format: date
+        checkOut:
+          type: string
+          format: date
+        balance:
+          oneOf:
+            - type: number
+            - type: string
+    AvailabilityItem:
+      type: object
+      properties:
+        roomId:
+          type: integer
+        roomNumber:
+          type: string
+        floor:
+          type: integer
+        capacity:
+          type: integer
+        currentStatus:
+          type: string
+          enum:
+            - free
+            - booked
+            - occupied
+        available:
+          type: boolean
+        conflictsCount:
+          type: integer
+        conflicts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AvailabilityConflict'
+    StayStatus:
+      type: string
+      enum:
+        - booked
+        - occupied
+        - completed
+        - cancelled
+    Stay:
+      type: object
+      properties:
+        id:
+          type: integer
+        room:
+          type: object
+          properties:
+            id:
+              type: integer
+            roomNumber:
+              type: string
+            status:
+              $ref: '#/components/schemas/RoomStatus'
+        mainGuestName:
+          type: string
+        extraGuestNames:
+          type: array
+          items:
+            type: string
+          nullable: true
+        checkIn:
+          type: string
+          format: date
+        checkOut:
+          type: string
+          format: date
+        balance:
+          oneOf:
+            - type: number
+            - type: string
+        status:
+          $ref: '#/components/schemas/StayStatus'
+    CreateStayForRoomRequest:
+      type: object
+      required:
+        - mainGuestName
+        - checkIn
+        - checkOut
+      properties:
+        mainGuestName:
+          type: string
+        extraGuestNames:
+          type: array
+          items:
+            type: string
+        checkIn:
+          type: string
+          format: date
+          example: '2025-09-10'
+        checkOut:
+          type: string
+          format: date
+          example: '2025-09-14'
+        balance:
+          oneOf:
+            - type: number
+            - type: string
+        status:
+          $ref: '#/components/schemas/StayStatus'
+          description: При створенні дозволено тільки booked|occupied
+    UpdateStayByDatesRequest:
+      type: object
+      properties:
+        mainGuestName:
+          type: string
+        extraGuestNames:
+          type: array
+          items:
+            type: string
+        newCheckIn:
+          type: string
+          format: date
+        newCheckOut:
+          type: string
+          format: date
+        balance:
+          oneOf:
+            - type: number
+            - type: string
+    CloseStayRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - completed
+            - cancelled
+    BulkPolicyHoursRequest:
+      type: object
+      description: Передай хоча б одне поле; null означає «слідувати дефолтам готелю».
+      properties:
+        checkInHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          nullable: true
+        checkOutHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          nullable: true
+paths:
+  /auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Логін (admin | editor)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              admin:
+                value:
+                  username: hotel-aurora
+                  password: S3cure!Pass
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/create-admin:
+    post:
+      security:
+        - bearerAuth: []
+      tags:
+        - Auth
+      summary: Створити admin (superadmin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAdminRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateAdminResponse'
+        '400':
+          description: Validation/duplicate error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/create-editor:
+    post:
+      security:
+        - bearerAuth: []
+      tags:
+        - Auth
+      summary: Створити editor (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEditorRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateEditorResponse'
+        '400':
+          description: Validation/duplicate error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/users:
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Auth
+      summary: Список користувачів
+      responses:
+        '200':
+          description: OK
+        '403':
+          description: Forbidden
+  '/auth/block/{username}':
+    put:
+      security:
+        - bearerAuth: []
+      tags:
+        - Auth
+      summary: Заблокувати admin та всіх його editors (superadmin)
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleMessage'
+        '404':
+          description: Not found
+  '/auth/unblock/{username}':
+    put:
+      security:
+        - bearerAuth: []
+      tags:
+        - Auth
+      summary: Розблокувати admin та всіх його editors (superadmin)
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleMessage'
+        '404':
+          description: Not found
+  '/auth/delete/{username}':
+    delete:
+      security:
+        - bearerAuth: []
+      tags:
+        - Auth
+      summary: Видалити користувача (superadmin — будь-кого; admin — тільки своїх editor'ів)
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleMessage'
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+  /rooms/all:
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Rooms
+      summary: Усі кімнати по системі (superadmin)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Room'
+  /rooms:
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Rooms
+      summary: Список кімнат поточного готелю
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Room'
+    post:
+      security:
+        - bearerAuth: []
+      tags:
+        - Rooms
+      summary: Створити кімнату
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoomRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '400':
+          description: Validation error
+        '409':
+          description: Duplicate room
+  '/rooms/status/{status}':
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Rooms
+      summary: Кімнати за статусом (free|booked|occupied)
+      parameters:
+        - name: status
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/RoomStatus'
+      responses:
+        '200':
+          description: OK
+  '/rooms/number/{roomNumber}':
+    put:
+      security:
+        - bearerAuth: []
+      tags:
+        - Rooms
+      summary: Повне редагування кімнати за roomNumber
+      parameters:
+        - name: roomNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoomRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomResponse'
+        '404':
+          description: Not found
+        '409':
+          description: Duplicate room number
+    delete:
+      security:
+        - bearerAuth: []
+      tags:
+        - Rooms
+      summary: Видалити кімнату
+      parameters:
+        - name: roomNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleMessage'
+        '404':
+          description: Not found
+  '/rooms/number/{roomNumber}/status':
+    put:
+      security:
+        - bearerAuth: []
+      tags:
+        - Rooms
+      summary: Ручна зміна статусу кімнати
+      parameters:
+        - name: roomNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomStatusUpdateRequest'
+      responses:
+        '200':
+          description: Updated
+  /rooms/policy-hours/bulk:
+    put:
+      security:
+        - bearerAuth: []
+      tags:
+        - Policy Hours
+      summary: Масово задати checkInHour/checkOutHour для всіх кімнат готелю
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkPolicyHoursRequest'
+            examples:
+              followHotelDefaults:
+                value:
+                  checkInHour: null
+                  checkOutHour: null
+              setCustomHours:
+                value:
+                  checkInHour: 15
+                  checkOutHour: 11
+      responses:
+        '200':
+          description: OK
+  /rooms/availability:
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Availability & Stats
+      summary: Доступність усіх кімнат у діапазоні
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: details
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - '1'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AvailabilityItem'
+        '400':
+          description: Missing from/to
+  '/rooms/number/{roomNumber}/availability':
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Availability & Stats
+      summary: Доступність однієї кімнати
+      parameters:
+        - name: roomNumber
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: details
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - '1'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityItem'
+        '404':
+          description: Room not found
+  /rooms/stats:
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Availability & Stats
+      summary: Статистика по статусам кімнат
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomsStats'
+  /rooms/stays/current:
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Availability & Stats
+      summary: Усі активні проживання (booked/occupied)
+      responses:
+        '200':
+          description: OK
+  '/rooms/number/{roomNumber}/stays':
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stays
+      summary: Історія проживань по кімнаті (опційно з фільтром дат)
+      parameters:
+        - name: roomNumber
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Stay'
+    post:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stays
+      summary: Створити бронювання/заселення
+      parameters:
+        - name: roomNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStayForRoomRequest'
+            examples:
+              create:
+                value:
+                  mainGuestName: Mario Rossi
+                  checkIn: '2025-09-10'
+                  checkOut: '2025-09-14'
+                  status: booked
+      responses:
+        '201':
+          description: Created
+        '409':
+          description: Conflicting dates
+  '/rooms/number/{roomNumber}/stays/close':
+    put:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stays
+      summary: Закрити проживання (completed|cancelled) за ключем дат
+      parameters:
+        - name: roomNumber
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: checkIn
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: checkOut
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloseStayRequest'
+      responses:
+        '200':
+          description: Closed
+  '/stays/{id}/check-in':
+    post:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Ops
+      summary: Позначити як occupied (ручний check-in)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+      responses:
+        '200':
+          description: OK
+  '/stays/{id}/check-out':
+    post:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Ops
+      summary: Позначити як completed (ручний check-out)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+      responses:
+        '200':
+          description: OK
+  '/stays/{id}/cancel':
+    post:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Ops
+      summary: Скасувати бронювання (booked → cancelled)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+  '/stays/status/{status}':
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Queries
+      summary: Список проживань за статусом
+      parameters:
+        - name: status
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/StayStatus'
+      responses:
+        '200':
+          description: OK
+  /stays/today/arrivals:
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Queries
+      summary: Сьогоднішні заїзди (checkIn = today) — booked/occupied
+      responses:
+        '200':
+          description: OK
+  /stays/today/departures:
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Queries
+      summary: Сьогоднішні виїзди (checkOut = today) — occupied
+      responses:
+        '200':
+          description: OK

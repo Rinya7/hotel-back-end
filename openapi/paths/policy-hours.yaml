@@ -1,0 +1,22 @@
+# openapi/paths/policy-hours.yaml
+policy_bulk:
+  put:
+    security: [{ bearerAuth: [] }]
+    tags: [Policy Hours]
+    summary: Масово задати checkInHour/checkOutHour для всіх кімнат готелю
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            {
+              $ref: "../openapi.base.yaml#/components/schemas/BulkPolicyHoursRequest",
+            }
+          examples:
+            followHotelDefaults:
+              value: { checkInHour: null, checkOutHour: null }
+            setCustomHours:
+              value: { checkInHour: 15, checkOutHour: 11 }
+    responses:
+      "200":
+        description: OK

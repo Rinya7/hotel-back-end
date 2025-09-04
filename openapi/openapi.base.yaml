@@ -1,0 +1,410 @@
+openapi: 3.0.3
+info:
+  title: Hotel Backend API
+  version: 1.0.0
+  description: >
+    Модульний OpenAPI. Всі components тут. Кожен шлях підключено через $ref
+    до файла у /openapi/paths/*.yaml, де PathItem зберігається під ключами-ідентифікаторами.
+
+servers:
+  - url: http://localhost:3000
+    description: Local dev
+
+tags:
+  - name: Auth
+    description: Логін та керування користувачами
+  - name: Rooms
+    description: CRUD, статуси
+  - name: Policy Hours
+    description: Масові години заселення/виїзду для кімнат
+  - name: Availability & Stats
+    description: Доступність, статистика, активні проживання
+  - name: Stays
+    description: Створення/редагування/закриття/історія проживань
+  - name: Stay Ops
+    description: Ручні check-in/out/cancel
+  - name: Stay Queries
+    description: Добірки для дашборда (за статусом, заїзди/виїзди сьогодні)
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # ==== COMMON ====
+    ErrorResponse:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string }
+
+    SimpleMessage:
+      type: object
+      properties:
+        message: { type: string }
+
+    # ==== AUTH ====
+    Role:
+      type: string
+      enum: [superadmin, admin, editor]
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string }
+
+    LoginPayload:
+      type: object
+      required: [token, username, role, adminId]
+      properties:
+        token: { type: string, description: "JWT (48h)" }
+        username: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        adminId:
+          type: integer
+          description: >
+            Власник готелю: для admin — його id; для editor — id owner admin.
+        hotelName: { type: string, nullable: true }
+        policy:
+          type: object
+          nullable: true
+          properties:
+            checkInHour: { type: integer, minimum: 0, maximum: 23 }
+            checkOutHour: { type: integer, minimum: 0, maximum: 23 }
+
+    LoginResponse:
+      type: object
+      properties:
+        payload:
+          $ref: "#/components/schemas/LoginPayload"
+
+    CreateAdminRequest:
+      type: object
+      required: [username, password, confirmPassword, hotel_name, address]
+      properties:
+        username: { type: string }
+        password: { type: string }
+        confirmPassword: { type: string }
+        hotel_name: { type: string }
+        address: { type: string }
+        full_name: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        checkInHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
+        checkOutHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
+
+    CreateAdminResponse:
+      type: object
+      required: [message, adminId, policy]
+      properties:
+        message: { type: string }
+        adminId: { type: integer }
+        policy:
+          type: object
+          properties:
+            checkInHour: { type: integer }
+            checkOutHour: { type: integer }
+
+    CreateEditorRequest:
+      type: object
+      required: [username, password, confirmPassword]
+      properties:
+        username: { type: string }
+        password: { type: string }
+        confirmPassword: { type: string }
+        full_name: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+
+    CreateEditorResponse:
+      type: object
+      properties:
+        message: { type: string }
+        token: { type: string }
+
+    PublicAdminUser:
+      type: object
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        hotel_name: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        full_name: { type: string, nullable: true }
+        logo_url: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        isBlocked: { type: boolean }
+        checkInHour: { type: integer, nullable: true }
+        checkOutHour: { type: integer, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        editorsCount: { type: integer }
+        editors:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              username: { type: string }
+              role: { $ref: "#/components/schemas/Role" }
+              full_name: { type: string, nullable: true }
+              phone: { type: string, nullable: true }
+              email: { type: string, nullable: true }
+              isBlocked: { type: boolean }
+              createdAt: { type: string, format: date-time }
+              updatedAt: { type: string, format: date-time }
+
+    PublicEditorUser:
+      type: object
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        full_name: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        isBlocked: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    # ==== ROOMS ====
+    RoomStatus:
+      type: string
+      enum: [free, booked, occupied]
+
+    Room:
+      type: object
+      properties:
+        id: { type: integer }
+        roomNumber: { type: string }
+        floor: { type: integer }
+        capacity: { type: integer }
+        status: { $ref: "#/components/schemas/RoomStatus" }
+        checkInHour: { type: integer, nullable: true }
+        checkOutHour: { type: integer, nullable: true }
+        wifiName: { type: string, nullable: true }
+        wifiPassword: { type: string, nullable: true }
+        qrBarUrl: { type: string, nullable: true }
+        mapPosition: { type: string, nullable: true }
+
+    CreateRoomRequest:
+      type: object
+      required: [roomNumber, floor, capacity]
+      properties:
+        roomNumber: { type: string }
+        floor: { type: integer, minimum: 0 }
+        capacity: { type: integer, minimum: 0 }
+        checkInHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
+        checkOutHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
+        wifiName: { type: string, nullable: true }
+        wifiPassword: { type: string, nullable: true }
+        qrBarUrl: { type: string, nullable: true }
+        mapPosition: { type: string, nullable: true }
+
+    UpdateRoomRequest:
+      type: object
+      properties:
+        roomNumber: { type: string }
+        floor: { type: integer, minimum: 0 }
+        capacity: { type: integer, minimum: 0 }
+        checkInHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
+        checkOutHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
+        wifiName: { type: string, nullable: true }
+        wifiPassword: { type: string, nullable: true }
+        qrBarUrl: { type: string, nullable: true }
+        mapPosition: { type: string, nullable: true }
+
+    RoomResponse:
+      type: object
+      properties:
+        message: { type: string }
+        room: { $ref: "#/components/schemas/Room" }
+
+    RoomStatusUpdateRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { $ref: "#/components/schemas/RoomStatus" }
+
+    RoomsStats:
+      type: object
+      properties:
+        free: { type: integer }
+        booked: { type: integer }
+        occupied: { type: integer }
+
+      # ==== AVAILABILITY ====
+    AvailabilityConflict:
+      type: object
+      properties:
+        id: { type: integer }
+        status: { type: string, enum: [booked, occupied, completed, cancelled] }
+        mainGuestName: { type: string }
+        checkIn: { type: string, format: date }
+        checkOut: { type: string, format: date }
+        balance:
+          oneOf:
+            - { type: number }
+            - { type: string }
+
+    AvailabilityItem:
+      type: object
+      properties:
+        roomId:
+          type: integer
+        roomNumber:
+          type: string
+        floor:
+          type: integer
+        capacity:
+          type: integer
+        currentStatus:
+          type: string
+          enum: [free, booked, occupied]
+        available:
+          type: boolean
+        conflictsCount:
+          type: integer
+        conflicts:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvailabilityConflict"
+
+    # ==== STAYS ====
+    StayStatus:
+      type: string
+      enum: [booked, occupied, completed, cancelled]
+
+    Stay:
+      type: object
+      properties:
+        id: { type: integer }
+        room:
+          type: object
+          properties:
+            id: { type: integer }
+            roomNumber: { type: string }
+            status: { $ref: "#/components/schemas/RoomStatus" }
+        mainGuestName: { type: string }
+        extraGuestNames:
+          type: array
+          items: { type: string }
+          nullable: true
+        checkIn: { type: string, format: date }
+        checkOut: { type: string, format: date }
+        balance:
+          oneOf: [{ type: number }, { type: string }]
+        status: { $ref: "#/components/schemas/StayStatus" }
+
+    CreateStayForRoomRequest:
+      type: object
+      required: [mainGuestName, checkIn, checkOut]
+      properties:
+        mainGuestName: { type: string }
+        extraGuestNames:
+          type: array
+          items: { type: string }
+        checkIn: { type: string, format: date, example: "2025-09-10" }
+        checkOut: { type: string, format: date, example: "2025-09-14" }
+        balance:
+          oneOf: [{ type: number }, { type: string }]
+        status:
+          $ref: "#/components/schemas/StayStatus"
+          description: "При створенні дозволено тільки booked|occupied"
+
+    UpdateStayByDatesRequest:
+      type: object
+      properties:
+        mainGuestName: { type: string }
+        extraGuestNames:
+          type: array
+          items: { type: string }
+        newCheckIn: { type: string, format: date }
+        newCheckOut: { type: string, format: date }
+        balance:
+          oneOf: [{ type: number }, { type: string }]
+
+    CloseStayRequest:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [completed, cancelled] }
+
+    # ==== POLICY HOURS (BULK) ====
+    BulkPolicyHoursRequest:
+      type: object
+      description: "Передай хоча б одне поле; null означає «слідувати дефолтам готелю»."
+      properties:
+        checkInHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
+        checkOutHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
+
+paths:
+  # --- Auth ---
+  /auth/login:
+    $ref: "./paths/auth.yaml#/auth_login"
+  /auth/create-admin:
+    $ref: "./paths/auth.yaml#/auth_create_admin"
+  /auth/create-editor:
+    $ref: "./paths/auth.yaml#/auth_create_editor"
+  /auth/users:
+    $ref: "./paths/auth.yaml#/auth_users"
+  /auth/block/{username}:
+    $ref: "./paths/auth.yaml#/auth_block"
+  /auth/unblock/{username}:
+    $ref: "./paths/auth.yaml#/auth_unblock"
+  /auth/delete/{username}:
+    $ref: "./paths/auth.yaml#/auth_delete"
+
+  # --- Rooms CRUD/Status ---
+  /rooms/all:
+    $ref: "./paths/rooms.yaml#/rooms_all"
+  /rooms:
+    $ref: "./paths/rooms.yaml#/rooms_list_and_create"
+  /rooms/status/{status}:
+    $ref: "./paths/rooms.yaml#/rooms_by_status"
+  /rooms/number/{roomNumber}:
+    $ref: "./paths/rooms.yaml#/rooms_update_delete"
+  /rooms/number/{roomNumber}/status:
+    $ref: "./paths/rooms.yaml#/rooms_update_status"
+
+  # --- Policy Hours (bulk) ---
+  /rooms/policy-hours/bulk:
+    $ref: "./paths/policy-hours.yaml#/policy_bulk"
+
+  # --- Availability & Stats ---
+  /rooms/availability:
+    $ref: "./paths/availability.yaml#/avail_all"
+  /rooms/number/{roomNumber}/availability:
+    $ref: "./paths/availability.yaml#/avail_one"
+  /rooms/stats:
+    $ref: "./paths/availability.yaml#/rooms_stats"
+  /rooms/stays/current:
+    $ref: "./paths/availability.yaml#/stays_current"
+
+  # --- Stays under room ---
+  /rooms/number/{roomNumber}/stays:
+    $ref: "./paths/stays.yaml#/stays_get_and_post"
+  /rooms/number/{roomNumber}/stays/close:
+    $ref: "./paths/stays.yaml#/stays_close"
+
+  # --- Stay Ops (manual) ---
+  /stays/{id}/check-in:
+    $ref: "./paths/stay-ops.yaml#/stay_check_in"
+  /stays/{id}/check-out:
+    $ref: "./paths/stay-ops.yaml#/stay_check_out"
+  /stays/{id}/cancel:
+    $ref: "./paths/stay-ops.yaml#/stay_cancel"
+
+  # --- Stay Queries ---
+  /stays/status/{status}:
+    $ref: "./paths/stay-queries.yaml#/stays_by_status"
+  /stays/today/arrivals:
+    $ref: "./paths/stay-queries.yaml#/stays_arrivals_today"
+  /stays/today/departures:
+    $ref: "./paths/stay-queries.yaml#/stays_departures_today"

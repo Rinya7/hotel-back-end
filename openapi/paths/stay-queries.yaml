@@ -1,0 +1,32 @@
+# openapi/paths/stay-queries.yaml
+stays_by_status:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Queries]
+    summary: Список проживань за статусом
+    parameters:
+      - name: status
+        in: path
+        required: true
+        schema: { $ref: "../openapi.base.yaml#/components/schemas/StayStatus" }
+    responses:
+      "200":
+        description: OK
+
+stays_arrivals_today:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Queries]
+    summary: Сьогоднішні заїзди (checkIn = today) — booked/occupied
+    responses:
+      "200":
+        description: OK
+
+stays_departures_today:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Queries]
+    summary: Сьогоднішні виїзди (checkOut = today) — occupied
+    responses:
+      "200":
+        description: OK
