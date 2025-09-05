@@ -187,6 +187,24 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
   }
 };
 
+/** Повертає ефективні години політики на рівні адміна: або значення з БД, або дефолти. */
+function effectivePolicyFromAdmin(
+  admin?: { checkInHour: number | null; checkOutHour: number | null } | null
+): { checkInHour: number; checkOutHour: number } | undefined {
+  if (!admin) return undefined;
+  const DEFAULT_IN = 14;
+  const DEFAULT_OUT = 10;
+
+  const inHour = Number.isInteger(admin.checkInHour)
+    ? (admin.checkInHour as number)
+    : DEFAULT_IN;
+  const outHour = Number.isInteger(admin.checkOutHour)
+    ? (admin.checkOutHour as number)
+    : DEFAULT_OUT;
+
+  return { checkInHour: inHour, checkOutHour: outHour };
+}
+
 /**
  * 🔐 POST /auth/login — admin or editor login
  * Payload:
@@ -237,29 +255,21 @@ export const loginAdmin = async (req: Request, res: Response) => {
     { expiresIn: "48h" }
   );
   // 🆕 Відповідь: віддаємо профіль для фронта
-  const policy =
-    admin.role === "admin"
-      ? { checkInHour: admin.checkInHour, checkOutHour: admin.checkOutHour }
-      : admin.createdBy
-      ? {
-          checkInHour: admin.createdBy.checkInHour,
-          checkOutHour: admin.createdBy.checkOutHour,
-        }
-      : undefined;
+  const policyNumbers =
+    admin.role === ROLES.ADMIN
+      ? effectivePolicyFromAdmin(admin)
+      : effectivePolicyFromAdmin(admin.createdBy ?? null);
 
   const payload: LoginResponseDto = {
     token,
     username: admin.username,
     role: admin.role as Role,
     adminId: ownerAdminId,
-    // Для admin — беремо своє hotel_name; для editor — hotel_name власника
     hotelName:
       admin.role === ROLES.ADMIN
         ? admin.hotel_name ?? undefined
         : admin.createdBy?.hotel_name ?? undefined,
-
-    // 👇 при желании можно сразу отдать и часы дефолтов отеля:
-    ...(policy ? { policy } : {}),
+    ...(policyNumbers ? { policy: policyNumbers } : {}),
   };
   return res.json({ payload });
 };
@@ -440,3 +450,113 @@ export const deleteAdminOrEditor = async (req: AuthRequest, res: Response) => {
   await adminRepo.remove(targetUser);
   res.json({ message: `User "${usernameToDelete}" deleted successfully` });
 };
+
+// 🔧 UPDATE: супер-адмін може редагувати профіль адміна-«власника» (готель)
+// PUT /auth/admin/:username
+// Body: будь-який із полів (не всі обовʼязкові)
+// - hotel_name, address, full_name, phone, email, logo_url
+// - checkInHour?: 0..23 | null  (null = "reset to follow defaults")
+// - checkOutHour?: 0..23 | null
+
+// 🔧 UPDATE: супер-адмін може редагувати профіль адміна-«власника» (готель)
+// PUT /auth/admin/:username
+// Body: будь-який із полів (не всі обовʼязкові)
+// - hotel_name, address, full_name, phone, email, logo_url
+// - checkInHour?: 0..23 | null  (null = "reset to follow defaults")
+// - checkOutHour?: 0..23 | null
+import { isHourOrNull } from "../utils/hours";
+
+export const updateAdminHotelProfile = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  // Додатковий захист: тільки супер-адмін
+  if (!req.user || req.user.role !== ROLES.SUPER) {
+    return res.status(403).json({ message: "Superadmin only" });
+  }
+
+  const username = req.params.username;
+
+  // Строгий тип баду (усі поля опційні)
+  const {
+    hotel_name,
+    address,
+    full_name,
+    phone,
+    email,
+    logo_url,
+    checkInHour,
+    checkOutHour,
+  }: {
+    hotel_name?: string;
+    address?: string;
+    full_name?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    logo_url?: string | null;
+    checkInHour?: number | null;
+    checkOutHour?: number | null;
+  } = req.body;
+
+  // Валідовуємо години, якщо прийшли
+  if (typeof checkInHour !== "undefined" && !isHourOrNull(checkInHour)) {
+    return res
+      .status(400)
+      .json({ message: "checkInHour must be 0..23 or null" });
+  }
+  if (typeof checkOutHour !== "undefined" && !isHourOrNull(checkOutHour)) {
+    return res
+      .status(400)
+      .json({ message: "checkOutHour must be 0..23 or null" });
+  }
+
+  const repo = AppDataSource.getRepository(Admin);
+  const admin = await repo.findOne({ where: { username } });
+  if (!admin || admin.role !== ROLES.ADMIN) {
+    return res.status(404).json({ message: "Admin not found" });
+  }
+
+  // Акуратно оновлюємо тільки передані поля
+  if (typeof hotel_name !== "undefined") admin.hotel_name = hotel_name;
+  if (typeof address !== "undefined") admin.address = address;
+  const fullNameNorm = normalizeNullableString(full_name);
+  if (typeof fullNameNorm !== "undefined") admin.full_name = fullNameNorm;
+
+  const phoneNorm = normalizeNullableString(phone);
+  if (typeof phoneNorm !== "undefined") admin.phone = phoneNorm;
+
+  const emailNorm = normalizeNullableString(email);
+  if (typeof emailNorm !== "undefined") admin.email = emailNorm;
+
+  const logoNorm = normalizeNullableString(logo_url);
+  if (typeof logoNorm !== "undefined") admin.logo_url = logoNorm;
+  if (typeof checkInHour !== "undefined") admin.checkInHour = checkInHour;
+  if (typeof checkOutHour !== "undefined") admin.checkOutHour = checkOutHour;
+
+  const saved = await repo.save(admin);
+
+  return res.json({
+    message: `Admin "${saved.username}" updated`,
+    admin: {
+      id: saved.id,
+      username: saved.username,
+      hotel_name: saved.hotel_name,
+      address: saved.address,
+      full_name: saved.full_name,
+      phone: saved.phone,
+      email: saved.email,
+      logo_url: saved.logo_url,
+      checkInHour: saved.checkInHour,
+      checkOutHour: saved.checkOutHour,
+      updatedAt: saved.updatedAt,
+    },
+  });
+};
+
+function normalizeNullableString(v: unknown): string | null | undefined {
+  if (typeof v === "undefined") return undefined;
+  if (v === null) return null;
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t.length ? t : null;
+}

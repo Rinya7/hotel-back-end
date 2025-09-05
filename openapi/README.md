@@ -1,3 +1,5 @@
+http://localhost:3000/docs
+
 1. Архітектура OpenAPI
 
 openapi/openapi.src.yaml — це твій головний файл, де зібрані всі components (схеми, типи) і таблиця paths, яка через $ref посилається на модулі.

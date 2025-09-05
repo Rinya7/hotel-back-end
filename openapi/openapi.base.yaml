@@ -110,6 +110,38 @@ components:
             checkInHour: { type: integer }
             checkOutHour: { type: integer }
 
+    UpdateHotelAdminRequest:
+      type: object
+      description: "Будь-яке з полів; не всі обов'язкові"
+      properties:
+        hotel_name: { type: string }
+        address: { type: string }
+        full_name: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        logo_url: { type: string, nullable: true }
+        checkInHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
+        checkOutHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
+
+    UpdateHotelAdminResponse:
+      type: object
+      properties:
+        message: { type: string }
+        admin:
+          type: object
+          properties:
+            id: { type: integer }
+            username: { type: string }
+            hotel_name: { type: string, nullable: true }
+            address: { type: string, nullable: true }
+            full_name: { type: string, nullable: true }
+            phone: { type: string, nullable: true }
+            email: { type: string, nullable: true }
+            logo_url: { type: string, nullable: true }
+            checkInHour: { type: integer, nullable: true }
+            checkOutHour: { type: integer, nullable: true }
+            updatedAt: { type: string, format: date-time }
+
     CreateEditorRequest:
       type: object
       required: [username, password, confirmPassword]
@@ -350,6 +382,8 @@ paths:
     $ref: "./paths/auth.yaml#/auth_login"
   /auth/create-admin:
     $ref: "./paths/auth.yaml#/auth_create_admin"
+  /auth/admin/{username}:
+    $ref: "./paths/auth.yaml#/auth_update_admin"
   /auth/create-editor:
     $ref: "./paths/auth.yaml#/auth_create_editor"
   /auth/users:

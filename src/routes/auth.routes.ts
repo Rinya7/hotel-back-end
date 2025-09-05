@@ -8,6 +8,7 @@ import {
   deleteAdminOrEditor,
   blockAdmin,
   unblockAdmin,
+  updateAdminHotelProfile,
 } from "../controllers/auth.controller";
 
 import {
@@ -27,6 +28,14 @@ router.post(
   authenticateToken,
   isSuperadmin,
   createAdminBySuperadmin
+);
+
+// 🔧 PUT /auth/admin/:username — редагує супер-адмін
+router.put(
+  "/admin/:username",
+  authenticateToken,
+  isSuperadmin,
+  updateAdminHotelProfile
 );
 
 // 🔐 Створення редактора — тільки для admin

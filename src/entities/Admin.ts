@@ -33,10 +33,18 @@ export class Admin {
   @Column({ nullable: true }) hotel_name?: string;
   @Column({ nullable: true }) address?: string;
 
-  @Column({ nullable: true }) full_name?: string;
-  @Column({ nullable: true }) logo_url?: string;
-  @Column({ nullable: true }) phone?: string;
-  @Column({ nullable: true }) email?: string;
+  @Column({ type: "varchar", length: 255, nullable: true }) full_name?:
+    | string
+    | null;
+  @Column({ type: "varchar", length: 255, nullable: true }) logo_url?:
+    | string
+    | null;
+  @Column({ type: "varchar", length: 255, nullable: true }) phone?:
+    | string
+    | null;
+  @Column({ type: "varchar", length: 255, nullable: true }) email?:
+    | string
+    | null;
 
   // Якщо це editor — хто його створив
   @ManyToOne(() => Admin, (admin) => admin.createdEditorAdmins, {
@@ -61,11 +69,11 @@ export class Admin {
   isBlocked!: boolean;
 
   /** ⬇️ NEW: Hotel policy hours (per hotel / main admin) */
-  @Column({ type: "int", default: 14 })
-  checkInHour!: number; // 0..23
+  @Column({ type: "int", nullable: true, default: 14 })
+  checkInHour!: number | null; // 0..23
 
-  @Column({ type: "int", default: 10 })
-  checkOutHour!: number; // 0..23
+  @Column({ type: "int", nullable: true, default: 10 })
+  checkOutHour!: number | null; // 0..23
 
   @CreateDateColumn() createdAt!: Date;
   @UpdateDateColumn() updatedAt!: Date;

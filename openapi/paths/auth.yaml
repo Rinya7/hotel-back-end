@@ -61,6 +61,36 @@ auth_create_admin:
             schema:
               { $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse" }
 
+auth_update_admin:
+  put:
+    security: [{ bearerAuth: [] }]
+    tags: [Auth]
+    summary: Оновити дані готелю (admin) — супер-адмін
+    parameters:
+      - name: username
+        in: path
+        required: true
+        schema: { type: string }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            {
+              $ref: "../openapi.base.yaml#/components/schemas/UpdateHotelAdminRequest",
+            }
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              {
+                $ref: "../openapi.base.yaml#/components/schemas/UpdateHotelAdminResponse",
+              }
+      "403": { description: Forbidden }
+      "404": { description: Not found }
+
 auth_create_editor:
   post:
     security: [{ bearerAuth: [] }]
