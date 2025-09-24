@@ -13,7 +13,6 @@
 import { AppDataSource } from "../config/data-source";
 import { Stay } from "../entities/Stay";
 import { Room } from "../entities/Room";
-import { Admin } from "../entities/Admin";
 import {
   LessThanOrEqual,
   MoreThanOrEqual,
@@ -21,72 +20,16 @@ import {
   In,
   EntityManager,
 } from "typeorm";
-import {
-  APP_TIMEZONE,
-  DEFAULT_CHECKIN_HOUR,
-  DEFAULT_CHECKOUT_HOUR,
-  CRON_TOLERANCE_SECONDS,
-} from "../config/time";
+import { APP_TIMEZONE, CRON_TOLERANCE_SECONDS } from "../config/time";
 import { DateTime } from "luxon";
+import {
+  makeLocalDateTime,
+  policyHoursFor,
+  nowWithTolerance,
+} from "../utils/policy";
 
 type StayStatus = "booked" | "occupied" | "completed" | "cancelled";
 type RoomStatus = "free" | "booked" | "occupied";
-
-/** Compose a local DateTime from a DATE-only column + a given local hour. */
-function makeLocalDateTime(
-  dateOnly: Date,
-  hour: number,
-  minute = 0,
-  second = 0
-): DateTime {
-  // DATE from DB comes as a JS Date at midnight (timezone nuances vary).
-  // We read Y/M/D from UTC getters to avoid local shifts, then compose in target TZ.
-  const js = new Date(dateOnly);
-  const y = js.getUTCFullYear();
-  const m = js.getUTCMonth() + 1;
-  const d = js.getUTCDate();
-  return DateTime.fromObject(
-    { year: y, month: m, day: d, hour, minute, second },
-    { zone: APP_TIMEZONE }
-  );
-}
-
-/** Now and a small back-tolerance to avoid missing exact boundaries. */
-function nowWithTolerance(): { now: DateTime; earliest: DateTime } {
-  const now = DateTime.now().setZone(APP_TIMEZONE);
-  const earliest = now.minus({ seconds: CRON_TOLERANCE_SECONDS });
-  return { now, earliest };
-}
-
-/** Pick policy hours with priority: Room → Admin → global defaults. */
-function policyHoursFor(room: Room): { inHour: number; outHour: number } {
-  // 1) Per-room override (only when both hours explicitly set as integers)
-  if (
-    Number.isInteger(room.checkInHour) &&
-    Number.isInteger(room.checkOutHour)
-  ) {
-    return {
-      inHour: room.checkInHour as number,
-      outHour: room.checkOutHour as number,
-    };
-  }
-
-  // 2) Fallback to Admin (owner) policy if present in the schema
-  const admin: Admin | undefined = room.admin;
-  if (
-    admin &&
-    Number.isInteger(admin.checkInHour) &&
-    Number.isInteger(admin.checkOutHour)
-  ) {
-    return {
-      inHour: admin.checkInHour,
-      outHour: admin.checkOutHour,
-    };
-  }
-
-  // 3) Global defaults (safe fallback)
-  return { inHour: DEFAULT_CHECKIN_HOUR, outHour: DEFAULT_CHECKOUT_HOUR };
-}
 
 export class StatusService {
   // Repositories via 'manager' inside a transaction ensure we operate within the tx.

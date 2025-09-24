@@ -1,6 +1,7 @@
 // src/utils/copyHotelDataFromAdmin.ts
 // Purpose: copy visible hotel profile fields from the owner admin to another admin (editor).
 import { Admin } from "../entities/Admin";
+import { policyHoursFor } from "./policy";
 
 export function copyHotelDataFromAdmin(owner: Admin): {
   hotel_name?: string;
@@ -11,6 +12,7 @@ export function copyHotelDataFromAdmin(owner: Admin): {
   checkInHour: number;
   checkOutHour: number;
 } {
+  const { inHour, outHour } = policyHoursFor({ admin: owner } as any);
   return {
     hotel_name: owner.hotel_name ?? undefined,
     address: owner.address ?? undefined,
@@ -18,7 +20,7 @@ export function copyHotelDataFromAdmin(owner: Admin): {
     phone: owner.phone ?? undefined,
     email: owner.email ?? undefined,
     // include policy hours so editor "inherits" visible hotel policy
-    checkInHour: owner.checkInHour,
-    checkOutHour: owner.checkOutHour,
+    checkInHour: inHour,
+    checkOutHour: outHour,
   };
 }

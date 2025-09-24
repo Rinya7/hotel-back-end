@@ -8,41 +8,65 @@ import {
   APP_TIMEZONE,
   DEFAULT_CHECKIN_HOUR,
   DEFAULT_CHECKOUT_HOUR,
+  CRON_TOLERANCE_SECONDS,
 } from "../config/time";
 
-/** Return policy hours with precedence: Room → Admin → global defaults. */
+/**
+ * Validate hour in range 0..23
+ */
+function isValidHour(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 23;
+}
+
+/**
+ * Policy precedence: Room → Admin → global defaults.
+ */
 export function policyHoursFor(room: Room): {
   inHour: number;
   outHour: number;
 } {
-  if (
-    Number.isInteger(room.checkInHour) &&
-    Number.isInteger(room.checkOutHour)
-  ) {
-    return {
-      inHour: room.checkInHour as number,
-      outHour: room.checkOutHour as number,
-    };
+  if (isValidHour(room.checkInHour) && isValidHour(room.checkOutHour)) {
+    return { inHour: room.checkInHour, outHour: room.checkOutHour };
   }
   const admin: Admin | undefined = room.admin;
   if (
     admin &&
-    Number.isInteger(admin.checkInHour) &&
-    Number.isInteger(admin.checkOutHour)
+    isValidHour(admin.checkInHour) &&
+    isValidHour(admin.checkOutHour)
   ) {
     return { inHour: admin.checkInHour, outHour: admin.checkOutHour };
   }
   return { inHour: DEFAULT_CHECKIN_HOUR, outHour: DEFAULT_CHECKOUT_HOUR };
 }
 
-/** Compose a local DateTime from a DATE-only column + local hour in APP_TIMEZONE. */
-export function makeLocalDateTime(dateOnly: Date, hour: number): DateTime {
+/** Compose a local Luxon DateTime from DATE-only + hour in APP_TIMEZONE. */
+export function makeLocalDateTime(
+  dateOnly: Date,
+  hour: number,
+  minute = 0,
+  second = 0
+): DateTime {
+  // DATE из БД приходит как "полночь UTC". Берём UTC-геттеры, чтобы избежать сдвигов.
   const js = new Date(dateOnly);
   const y = js.getUTCFullYear();
   const m = js.getUTCMonth() + 1;
   const d = js.getUTCDate();
+
   return DateTime.fromObject(
-    { year: y, month: m, day: d, hour },
+    { year: y, month: m, day: d, hour, minute, second },
     { zone: APP_TIMEZONE }
   );
+}
+
+/**
+ * Return current time and tolerance window.
+ * "now" = current DateTime in APP_TIMEZONE.
+ * "earliest" = now - CRON_TOLERANCE_SECONDS (e.g., 59s back).
+ *
+ * Purpose: avoid missing exact boundary conditions in cron.
+ */
+export function nowWithTolerance(): { now: DateTime; earliest: DateTime } {
+  const now = DateTime.now().setZone(APP_TIMEZONE);
+  const earliest = now.minus({ seconds: CRON_TOLERANCE_SECONDS });
+  return { now, earliest };
 }
