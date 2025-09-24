@@ -45,12 +45,14 @@ function policyHoursFor(room: Room): { inHour: number; outHour: number } {
     };
   }
   const admin: Admin | undefined = room.admin;
-  if (
-    admin &&
-    Number.isInteger(admin.checkInHour) &&
-    Number.isInteger(admin.checkOutHour)
-  ) {
-    return { inHour: admin.checkInHour, outHour: admin.checkOutHour };
+  if (admin) {
+    const inHour = Number.isInteger(admin.checkInHour)
+      ? (admin.checkInHour as number)
+      : DEFAULT_IN;
+    const outHour = Number.isInteger(admin.checkOutHour)
+      ? (admin.checkOutHour as number)
+      : DEFAULT_OUT;
+    return { inHour, outHour };
   }
   return { inHour: DEFAULT_IN, outHour: DEFAULT_OUT };
 }

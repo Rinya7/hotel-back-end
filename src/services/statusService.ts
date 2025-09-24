@@ -79,8 +79,8 @@ function policyHoursFor(room: Room): { inHour: number; outHour: number } {
     Number.isInteger(admin.checkOutHour)
   ) {
     return {
-      inHour: admin.checkInHour,
-      outHour: admin.checkOutHour,
+      inHour: admin.checkInHour as number,
+      outHour: admin.checkOutHour as number,
     };
   }
 

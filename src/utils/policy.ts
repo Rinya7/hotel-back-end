@@ -30,7 +30,10 @@ export function policyHoursFor(room: Room): {
     Number.isInteger(admin.checkInHour) &&
     Number.isInteger(admin.checkOutHour)
   ) {
-    return { inHour: admin.checkInHour, outHour: admin.checkOutHour };
+    return {
+      inHour: admin.checkInHour as number,
+      outHour: admin.checkOutHour as number,
+    };
   }
   return { inHour: DEFAULT_CHECKIN_HOUR, outHour: DEFAULT_CHECKOUT_HOUR };
 }
