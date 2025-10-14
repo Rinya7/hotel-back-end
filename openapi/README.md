@@ -1,69 +1,43 @@
-http://localhost:3000/docs
+# OpenAPI Documentation
 
-1. Архітектура OpenAPI
+**Документація:** http://localhost:3000/docs
 
-openapi/openapi.src.yaml — це твій головний файл, де зібрані всі components (схеми, типи) і таблиця paths, яка через $ref посилається на модулі.
+## 1. Архітектура OpenAPI
 
-openapi/paths/\*.yaml — окремі модулі для Auth, Rooms, Stays, Availability тощо.
-У кожному модулі — набір PathItem під ключем (наприклад rooms_all).
+- **Головний файл:** `openapi/openapi.base.yaml` (всі components + paths із `$ref` на модулі)
+- **Модулі:** `openapi/paths/*.yaml` з `PathItem` під ключами (наприклад, `rooms_all`)
+- **Збірка:** `swagger-cli bundle` → `openapi/openapi.yaml` (використовується у Swagger UI/CI)
 
-swagger-cli bundle зливає все в один валідний файл openapi/openapi.yaml (зручно для CI, Swagger UI, валідаторів).
+### Команди
 
-Так ми уникаємо гігантського моноліту й легко підтримуємо документацію.
+- Зібрати OpenAPI: `npm run openapi:bundle`
+- Провалідувати: `npm run openapi:lint`
 
-Валідація через express-openapi-validator
+## 2. Валідація через express-openapi-validator
 
-2. Ми підключили middleware express-openapi-validator в app.ts.
+У `src/app.ts` підключено middleware, яке читає `openapi/openapi.yaml` і:
+- перевіряє вхідні дані (body, query, path params)
+- перевіряє вихідні відповіді контролерів
 
-Він бере openapi.yaml і автоматично:
+### Swagger UI та JSON
 
-перевіряє вхідні дані (body, query, path params) → відповідність схемам;
+- **UI:** `GET /docs`
+- **JSON:** `GET /docs.json`
 
-перевіряє вихідні відповіді контролера → чи дотримуються опису.
+## 3. Теги/Домени
 
-Результат: бекенд і фронт завжди синхронізовані зі схемою. Якщо бекенд повернув щось не по документації — отримаєш помилку.
+- **Auth** — логін та керування користувачами
+- **Rooms** — CRUD кімнат і статуси
+- **Policy Hours** — масові години заселення/виїзду
+- **Availability & Stats** — доступність, статистика, активні проживання
+- **Stays** — CRUD проживань під кімнатами
+- **Stay Ops** — ручні check-in/out/cancel
+- **Stay Queries** — добірки для дашборда
 
-3. Ролі та права
+## 4. Ролі та права
 
-В Ролі та права адиминов.docx ти вже бачиш повну таблицю:
+- **superadmin** → створює/блокує адмінів, бачить усі кімнати
+- **admin** → керує своїм готелем, кімнатами, редакторами
+- **editor** → тільки працює зі статусами/гостями, без CRUD на користувачів чи кімнати
 
-superadmin → створює/блокує адмінів, бачить усі кімнати.
-
-admin → керує своїм готелем, кімнатами, редакторами.
-
-editor → тільки працює зі статусами/гостями, без CRUD на користувачів чи кімнати.
-Це вже відбито і в коді (middlewares) і в документації (security блоки в OpenAPI).
-
-4. Endpoints
-
-Ми підтягнули весь набір методів із твоїх файлів:
-
-Auth (/auth/\*) → логін, створення admin/editor, users, block/unblock/delete.
-
-Rooms (/rooms/\*) → CRUD, статус, список, всі кімнати.
-
-Availability & Stats (/rooms/availability, /rooms/stats, /rooms/stays/current).
-
-Stays (/rooms/number/{room}/stays, close, ручні check-in/out/cancel).
-
-Stay Queries (/stays/status/{status}, arrivals, departures).
-
-Кожен з них має:
-
-приклади request/response;
-
-опис ролей, хто має доступ;
-
-помилки (400/401/403/404/409).
-
-5. Frontend (Admin)
-
-Ми вже заклали базовий Vue 3 фронт (login, dashboard, rooms, stays):
-
-бере JWT з бекенда;
-
-у Pinia зберігає token/role/username;
-
-через Axios підставляє Authorization: Bearer …;
-
-має захист роутів (beforeEach).
+Це відбито в коді (middlewares) і в документації (security блоки в OpenAPI).

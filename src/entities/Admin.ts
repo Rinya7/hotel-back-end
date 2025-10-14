@@ -75,6 +75,13 @@ export class Admin {
   @Column({ type: "int", nullable: true, default: 10 })
   checkOutHour!: number | null; // 0..23
 
+  /** ⬇️ NEW: Hotel Wi-Fi settings (per hotel / main admin) */
+  @Column({ type: "varchar", length: 255, nullable: true, default: "wifi_name" })
+  defaultWifiName!: string | null;
+
+  @Column({ type: "varchar", length: 255, nullable: true, default: "admin" })
+  defaultWifiPassword!: string | null;
+
   @CreateDateColumn() createdAt!: Date;
   @UpdateDateColumn() updatedAt!: Date;
 }

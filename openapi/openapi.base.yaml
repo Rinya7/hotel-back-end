@@ -97,6 +97,8 @@ components:
         email: { type: string, nullable: true }
         checkInHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
         checkOutHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
+        defaultWifiName: { type: string, nullable: true }
+        defaultWifiPassword: { type: string, nullable: true }
 
     CreateAdminResponse:
       type: object
@@ -122,6 +124,8 @@ components:
         logo_url: { type: string, nullable: true }
         checkInHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
         checkOutHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
+        defaultWifiName: { type: string, nullable: true }
+        defaultWifiPassword: { type: string, nullable: true }
 
     UpdateHotelAdminResponse:
       type: object
@@ -140,6 +144,8 @@ components:
             logo_url: { type: string, nullable: true }
             checkInHour: { type: integer, nullable: true }
             checkOutHour: { type: integer, nullable: true }
+            defaultWifiName: { type: string, nullable: true }
+            defaultWifiPassword: { type: string, nullable: true }
             updatedAt: { type: string, format: date-time }
 
     CreateEditorRequest:
@@ -174,6 +180,8 @@ components:
         isBlocked: { type: boolean }
         checkInHour: { type: integer, nullable: true }
         checkOutHour: { type: integer, nullable: true }
+        defaultWifiName: { type: string, nullable: true }
+        defaultWifiPassword: { type: string, nullable: true }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         editorsCount: { type: integer }

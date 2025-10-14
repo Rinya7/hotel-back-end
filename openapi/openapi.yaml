@@ -134,6 +134,12 @@ components:
           minimum: 0
           maximum: 23
           nullable: true
+        defaultWifiName:
+          type: string
+          nullable: true
+        defaultWifiPassword:
+          type: string
+          nullable: true
     CreateAdminResponse:
       type: object
       required:
@@ -182,6 +188,12 @@ components:
           minimum: 0
           maximum: 23
           nullable: true
+        defaultWifiName:
+          type: string
+          nullable: true
+        defaultWifiPassword:
+          type: string
+          nullable: true
     UpdateHotelAdminResponse:
       type: object
       properties:
@@ -217,6 +229,12 @@ components:
               nullable: true
             checkOutHour:
               type: integer
+              nullable: true
+            defaultWifiName:
+              type: string
+              nullable: true
+            defaultWifiPassword:
+              type: string
               nullable: true
             updatedAt:
               type: string
@@ -284,6 +302,12 @@ components:
           nullable: true
         checkOutHour:
           type: integer
+          nullable: true
+        defaultWifiName:
+          type: string
+          nullable: true
+        defaultWifiPassword:
+          type: string
           nullable: true
         createdAt:
           type: string

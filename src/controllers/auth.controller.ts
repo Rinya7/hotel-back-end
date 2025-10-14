@@ -38,6 +38,8 @@ export const createAdminBySuperadmin = async (
     email,
     checkInHour,
     checkOutHour,
+    defaultWifiName,
+    defaultWifiPassword,
   } = req.body as {
     username: string;
     password: string;
@@ -49,6 +51,8 @@ export const createAdminBySuperadmin = async (
     email?: string;
     checkInHour?: number;
     checkOutHour?: number;
+    defaultWifiName?: string;
+    defaultWifiPassword?: string;
   };
 
   if (!username || !password || !confirmPassword || !hotel_name || !address) {
@@ -92,6 +96,8 @@ export const createAdminBySuperadmin = async (
     email,
     ...(typeof checkInHour !== "undefined" ? { checkInHour } : {}),
     ...(typeof checkOutHour !== "undefined" ? { checkOutHour } : {}),
+    ...(defaultWifiName ? { defaultWifiName } : {}),
+    ...(defaultWifiPassword ? { defaultWifiPassword } : {}),
   });
 
   const saved = await adminRepo.save(newAdmin);
