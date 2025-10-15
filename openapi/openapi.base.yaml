@@ -17,6 +17,8 @@ tags:
     description: CRUD, статуси
   - name: Policy Hours
     description: Масові години заселення/виїзду для кімнат
+  - name: Wi-Fi Management
+    description: Масове керування Wi-Fi даними для кімнат
   - name: Availability & Stats
     description: Доступність, статистика, активні проживання
   - name: Stays
@@ -384,6 +386,23 @@ components:
         checkInHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
         checkOutHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
 
+    # ==== WI-FI (BULK) ====
+    BulkWiFiRequest:
+      type: object
+      required: [wifiName, wifiPassword]
+      description: "Масове оновлення Wi-Fi даних для всіх кімнат готелю."
+      properties:
+        wifiName:
+          type: string
+          maxLength: 100
+          description: "Назва Wi-Fi мережі (SSID)"
+          example: "HotelGuest"
+        wifiPassword:
+          type: string
+          maxLength: 100
+          description: "Пароль Wi-Fi мережі"
+          example: "SecurePassword123"
+
 paths:
   # --- Auth ---
   /auth/login:
@@ -418,6 +437,10 @@ paths:
   # --- Policy Hours (bulk) ---
   /rooms/policy-hours/bulk:
     $ref: "./paths/policy-hours.yaml#/policy_bulk"
+
+  # --- Wi-Fi (bulk) ---
+  /rooms/wifi/bulk:
+    $ref: "./paths/wifi.yaml#/wifi_bulk"
 
   # --- Availability & Stats ---
   /rooms/availability:

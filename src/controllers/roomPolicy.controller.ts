@@ -17,6 +17,12 @@ interface BulkPolicyBody {
   checkOutHour?: number | null;
 }
 
+/** Request body for bulk Wi-Fi update (both fields required). */
+interface BulkWiFiBody {
+  wifiName: string;
+  wifiPassword: string;
+}
+
 /**
  * PUT /rooms/policy-hours/bulk
  * Access: admin or editor of the current hotel.
@@ -78,6 +84,67 @@ export const bulkSetRoomPolicyHours = async (
     applied: {
       ...(typeof checkInHour !== "undefined" ? { checkInHour } : {}),
       ...(typeof checkOutHour !== "undefined" ? { checkOutHour } : {}),
+    },
+  });
+};
+
+/**
+ * PUT /rooms/wifi/bulk
+ * Access: admin or editor of the current hotel.
+ *
+ * Behavior:
+ *  - Updates wifiName and wifiPassword for ALL rooms of the hotel.
+ *  - Both fields are required.
+ * Implementation: one UPDATE with QueryBuilder, no per-row loops.
+ */
+export const bulkSetRoomWiFi = async (req: AuthRequest, res: Response) => {
+  // Extra safety; normally guarded in routes.
+  if (
+    !req.user ||
+    !(req.user.role === ROLES.ADMIN || req.user.role === ROLES.EDITOR)
+  ) {
+    return res.status(403).json({ message: "Access denied" });
+  }
+
+  const ownerAdminId = getOwnerAdminId(req);
+  const { wifiName, wifiPassword } = req.body as BulkWiFiBody;
+
+  // Валидация: оба поля обязательны
+  if (
+    typeof wifiName !== "string" ||
+    wifiName.trim().length === 0 ||
+    typeof wifiPassword !== "string" ||
+    wifiPassword.trim().length === 0
+  ) {
+    return res.status(400).json({
+      message:
+        "Both wifiName and wifiPassword are required and must be non-empty strings",
+    });
+  }
+
+  // Проверяем длину (в БД лимит 100 символов)
+  if (wifiName.length > 100 || wifiPassword.length > 100) {
+    return res.status(400).json({
+      message: "wifiName and wifiPassword must not exceed 100 characters",
+    });
+  }
+
+  // Обновляем все комнаты отеля
+  const result = await AppDataSource.createQueryBuilder()
+    .update(Room)
+    .set({
+      wifiName: wifiName.trim(),
+      wifiPassword: wifiPassword.trim(),
+    })
+    .where(`"adminId" = :ownerAdminId`, { ownerAdminId })
+    .execute();
+
+  return res.status(200).json({
+    message: "Wi-Fi credentials updated successfully",
+    updated: result.affected ?? 0,
+    applied: {
+      wifiName: wifiName.trim(),
+      wifiPassword: "***", // Не показываем пароль в ответе
     },
   });
 };

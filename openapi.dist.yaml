@@ -14,6 +14,8 @@ tags:
     description: 'CRUD, статуси'
   - name: Policy Hours
     description: Масові години заселення/виїзду для кімнат
+  - name: Wi-Fi Management
+    description: Масове керування Wi-Fi даними для кімнат
   - name: Availability & Stats
     description: 'Доступність, статистика, активні проживання'
   - name: Stays
@@ -134,6 +136,12 @@ components:
           minimum: 0
           maximum: 23
           nullable: true
+        defaultWifiName:
+          type: string
+          nullable: true
+        defaultWifiPassword:
+          type: string
+          nullable: true
     CreateAdminResponse:
       type: object
       required:
@@ -152,6 +160,87 @@ components:
               type: integer
             checkOutHour:
               type: integer
+    UpdateHotelAdminRequest:
+      type: object
+      description: Будь-яке з полів; не всі обов'язкові
+      properties:
+        hotel_name:
+          type: string
+        address:
+          type: string
+        full_name:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        logo_url:
+          type: string
+          nullable: true
+        checkInHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          nullable: true
+        checkOutHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          nullable: true
+        defaultWifiName:
+          type: string
+          nullable: true
+        defaultWifiPassword:
+          type: string
+          nullable: true
+    UpdateHotelAdminResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        admin:
+          type: object
+          properties:
+            id:
+              type: integer
+            username:
+              type: string
+            hotel_name:
+              type: string
+              nullable: true
+            address:
+              type: string
+              nullable: true
+            full_name:
+              type: string
+              nullable: true
+            phone:
+              type: string
+              nullable: true
+            email:
+              type: string
+              nullable: true
+            logo_url:
+              type: string
+              nullable: true
+            checkInHour:
+              type: integer
+              nullable: true
+            checkOutHour:
+              type: integer
+              nullable: true
+            defaultWifiName:
+              type: string
+              nullable: true
+            defaultWifiPassword:
+              type: string
+              nullable: true
+            updatedAt:
+              type: string
+              format: date-time
     CreateEditorRequest:
       type: object
       required:
@@ -215,6 +304,12 @@ components:
           nullable: true
         checkOutHour:
           type: integer
+          nullable: true
+        defaultWifiName:
+          type: string
+          nullable: true
+        defaultWifiPassword:
+          type: string
           nullable: true
         createdAt:
           type: string
@@ -568,6 +663,23 @@ components:
           minimum: 0
           maximum: 23
           nullable: true
+    BulkWiFiRequest:
+      type: object
+      required:
+        - wifiName
+        - wifiPassword
+      description: Масове оновлення Wi-Fi даних для всіх кімнат готелю.
+      properties:
+        wifiName:
+          type: string
+          maxLength: 100
+          description: Назва Wi-Fi мережі (SSID)
+          example: HotelGuest
+        wifiPassword:
+          type: string
+          maxLength: 100
+          description: Пароль Wi-Fi мережі
+          example: SecurePassword123
 paths:
   /auth/login:
     post:
@@ -630,6 +742,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  '/auth/admin/{username}':
+    put:
+      security:
+        - bearerAuth: []
+      tags:
+        - Auth
+      summary: Оновити дані готелю (admin) — супер-адмін
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateHotelAdminRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateHotelAdminResponse'
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
   /auth/create-editor:
     post:
       security:
@@ -911,6 +1053,62 @@ paths:
       responses:
         '200':
           description: OK
+  /rooms/wifi/bulk:
+    put:
+      security:
+        - bearerAuth: []
+      tags:
+        - Wi-Fi Management
+      summary: Масово оновити Wi-Fi дані (логін та пароль) для всіх кімнат готелю
+      description: |
+        Оновлює wifiName та wifiPassword для всіх кімнат готелю.
+        Доступно тільки для адміністратора та редактора.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkWiFiRequest'
+            examples:
+              updateWiFi:
+                value:
+                  wifiName: HotelGuest
+                  wifiPassword: SecurePassword123
+      responses:
+        '200':
+          description: Wi-Fi дані успішно оновлені
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Wi-Fi credentials updated successfully
+                  updated:
+                    type: number
+                    example: 25
+                  applied:
+                    type: object
+                    properties:
+                      wifiName:
+                        type: string
+                        example: HotelGuest
+                      wifiPassword:
+                        type: string
+                        example: '***'
+        '400':
+          description: Невалідні дані
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Both wifiName and wifiPassword are required and must be non-empty strings
+        '403':
+          description: Доступ заборонено
   /rooms/availability:
     get:
       security:

@@ -4,16 +4,27 @@ import {
   authenticateToken,
   isEditorOrAdmin,
 } from "../middlewares/authMiddleware";
-import { bulkSetRoomPolicyHours } from "../controllers/roomPolicy.controller";
+import {
+  bulkSetRoomPolicyHours,
+  bulkSetRoomWiFi,
+} from "../controllers/roomPolicy.controller";
 
 const router = Router();
 
-// Single bulk endpoint (we removed admin-level policy routes)
+// Bulk endpoint для policy hours
 router.put(
   "/rooms/policy-hours/bulk",
   authenticateToken,
   isEditorOrAdmin,
   bulkSetRoomPolicyHours
+);
+
+// Bulk endpoint для Wi-Fi credentials
+router.put(
+  "/rooms/wifi/bulk",
+  authenticateToken,
+  isEditorOrAdmin,
+  bulkSetRoomWiFi
 );
 
 export default router;

@@ -1,0 +1,56 @@
+# openapi/paths/wifi.yaml
+wifi_bulk:
+  put:
+    security: [{ bearerAuth: [] }]
+    tags: [Wi-Fi Management]
+    summary: Масово оновити Wi-Fi дані (логін та пароль) для всіх кімнат готелю
+    description: |
+      Оновлює wifiName та wifiPassword для всіх кімнат готелю.
+      Доступно тільки для адміністратора та редактора.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            { $ref: "../openapi.base.yaml#/components/schemas/BulkWiFiRequest" }
+          examples:
+            updateWiFi:
+              value:
+                wifiName: "HotelGuest"
+                wifiPassword: "SecurePassword123"
+    responses:
+      "200":
+        description: Wi-Fi дані успішно оновлені
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Wi-Fi credentials updated successfully"
+                updated:
+                  type: number
+                  example: 25
+                applied:
+                  type: object
+                  properties:
+                    wifiName:
+                      type: string
+                      example: "HotelGuest"
+                    wifiPassword:
+                      type: string
+                      example: "***"
+      "400":
+        description: Невалідні дані
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Both wifiName and wifiPassword are required and must be non-empty strings"
+      "403":
+        description: Доступ заборонено
+

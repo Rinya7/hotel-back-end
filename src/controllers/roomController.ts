@@ -144,8 +144,17 @@ export const createRoom = async (req: AuthRequest, res: Response) => {
   room.floor = floor;
   room.capacity = capacity;
   room.status = "free";
-  room.wifiName = normalizeNullableString(wifiName);
-  room.wifiPassword = normalizeNullableString(wifiPassword);
+
+  // --- Wi-Fi strategy: if provided → use; if omitted → copy from owner defaults ---
+  room.wifiName =
+    typeof wifiName !== "undefined"
+      ? normalizeNullableString(wifiName)
+      : owner.defaultWifiName;
+  room.wifiPassword =
+    typeof wifiPassword !== "undefined"
+      ? normalizeNullableString(wifiPassword)
+      : owner.defaultWifiPassword;
+
   room.qrBarUrl = normalizeNullableString(qrBarUrl);
   room.mapPosition = normalizeNullableString(mapPosition);
 
