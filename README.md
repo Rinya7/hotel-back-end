@@ -154,6 +154,7 @@ npm run openapi:lint
 ### Аутентифікація
 - `POST /auth/login` — логін
 - `POST /auth/create-admin` — створити адміна (superadmin)
+- `PUT /auth/admin/{username}` — редагувати профіль адміна (superadmin)
 - `POST /auth/create-editor` — створити редактора (admin)
 - `GET /auth/users` — список користувачів
 - `PUT /auth/block/{username}` — заблокувати
@@ -163,22 +164,31 @@ npm run openapi:lint
 ### Кімнати
 - `GET /rooms` — список кімнат готелю
 - `GET /rooms/all` — всі кімнати (superadmin)
+- `GET /rooms/status/{status}` — кімнати за статусом
 - `POST /rooms` — створити кімнату
 - `PUT /rooms/number/{roomNumber}` — редагувати
 - `DELETE /rooms/number/{roomNumber}` — видалити
 - `PUT /rooms/number/{roomNumber}/status` — змінити статус
+- `GET /rooms/number/{roomNumber}/availability` — доступність однієї кімнати
+
+### Масові операції
+- `PUT /rooms/policy-hours/bulk` — масове задання часу заселення/виїзду
+- `PUT /rooms/wifi/bulk` — масове задання WiFi даних
 
 ### Проживання
 - `GET /rooms/number/{roomNumber}/stays` — історія кімнати
+- `GET /rooms/stays/current` — всі активні проживання
 - `POST /rooms/number/{roomNumber}/stays` — створити бронювання
+- `PUT /rooms/number/{roomNumber}/stays` — редагувати проживання
 - `PUT /rooms/number/{roomNumber}/stays/close` — закрити
 - `POST /stays/{id}/check-in` — заселити
 - `POST /stays/{id}/check-out` — виселити
 - `POST /stays/{id}/cancel` — скасувати
+- `GET /stays/status/{status}` — проживання за статусом
 
 ### Статистика
 - `GET /rooms/stats` — статистика кімнат
-- `GET /rooms/availability` — доступність
+- `GET /rooms/availability` — доступність всіх кімнат
 - `GET /stays/today/arrivals` — сьогоднішні заїзди
 - `GET /stays/today/departures` — сьогоднішні виїзди
 
