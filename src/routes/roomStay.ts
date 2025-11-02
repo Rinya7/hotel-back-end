@@ -19,7 +19,12 @@ const router = Router();
  * Get all current active stays for the hotel
  * GET /rooms/stays/current
  */
-router.get("/stays/current", authenticateToken, isEditorOrAdmin, getCurrentStays);
+router.get(
+  "/stays/current",
+  authenticateToken,
+  isEditorOrAdmin,
+  getCurrentStays
+);
 
 /**
  * Create a stay for a specific room.
