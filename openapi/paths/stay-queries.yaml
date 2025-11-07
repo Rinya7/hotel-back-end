@@ -30,3 +30,101 @@ stays_departures_today:
     responses:
       "200":
         description: OK
+
+stays_search:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Queries]
+    summary: Пошук проживань по гостю або користувачу
+    parameters:
+      - name: guest
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Фільтр по імені гостя (часткове співпадіння)
+      - name: changedBy
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Фільтр по користувачу, який змінював (часткове співпадіння)
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "../openapi.base.yaml#/components/schemas/Stay"
+
+stay_by_id:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Queries]
+    summary: Отримати проживання за ID
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+        description: ID проживання
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/Stay"
+      "404":
+        description: Stay not found
+
+stay_history:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Queries]
+    summary: Історія змін статусів проживання
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+        description: ID проживання
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                stayId:
+                  type: integer
+                mainGuestName:
+                  type: string
+                logs:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      oldStatus:
+                        type: string
+                      newStatus:
+                        type: string
+                      changedAt:
+                        type: string
+                        format: date-time
+                      changedBy:
+                        type: string
+                        nullable: true
+                      changedByRole:
+                        type: string
+                        nullable: true
+                      comment:
+                        type: string
+                        nullable: true
+      "404":
+        description: Stay not found

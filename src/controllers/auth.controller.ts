@@ -9,6 +9,11 @@ import { copyHotelDataFromAdmin } from "../utils/copyHotelDataFromAdmin";
 import type { LoginRequestDto, LoginResponseDto } from "../dto/auth.dto";
 import { ROLES, Role } from "../auth/roles";
 import { isHour, isHourOptional } from "../utils/hours";
+import {
+  geocodeAddress,
+  buildFullAddress,
+} from "../services/geocoding.service";
+import { getRandomHotelLogo } from "../constants/defaults";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
@@ -27,15 +32,29 @@ export const createAdminBySuperadmin = async (
   if (!req.user || req.user.role !== ROLES.SUPER) {
     return res.status(403).json({ message: "Superadmin only" });
   }
+
   const {
     username,
     password,
     confirmPassword,
     hotel_name,
-    address,
+    // Детальная структура адреса
+    street,
+    buildingNumber,
+    apartmentNumber,
+    country,
+    province,
+    postalCode,
+    latitude,
+    longitude,
     full_name,
+    // Телефон разделен на код и номер
+    phoneCountryCode,
+    phoneNumber,
+    // Для обратной совместимости оставляем phone (будет игнорироваться если указаны phoneCountryCode и phoneNumber)
     phone,
     email,
+    logo_url,
     checkInHour,
     checkOutHour,
     defaultWifiName,
@@ -45,20 +64,31 @@ export const createAdminBySuperadmin = async (
     password: string;
     confirmPassword: string;
     hotel_name: string;
-    address: string;
+    street?: string | null;
+    buildingNumber?: string | null;
+    apartmentNumber?: string | null;
+    country?: string | null;
+    province?: string | null;
+    postalCode?: string | null;
+    latitude?: string | number | null; // Может прийти как число или строка
+    longitude?: string | number | null;
     full_name?: string;
-    phone?: string;
+    phoneCountryCode?: string | null;
+    phoneNumber?: string | null;
+    phone?: string; // Для обратной совместимости
     email?: string;
-    checkInHour?: number;
-    checkOutHour?: number;
+    logo_url?: string | null;
+    checkInHour?: number | string; // Может прийти как число или строка из формы
+    checkOutHour?: number | string; // Может прийти как число или строка из формы
     defaultWifiName?: string;
     defaultWifiPassword?: string;
   };
 
-  if (!username || !password || !confirmPassword || !hotel_name || !address) {
+  // Обязательные поля: username, password, confirmPassword, hotel_name, street
+  if (!username || !password || !confirmPassword || !hotel_name || !street) {
     return res.status(400).json({
       message:
-        "username, password, confirmPassword, hotel_name and address are required",
+        "username, password, confirmPassword, hotel_name and street are required",
     });
   }
 
@@ -67,7 +97,44 @@ export const createAdminBySuperadmin = async (
   }
 
   // Optional policy hours validation (0..23 if provided)
-  if (!isHourOptional(checkInHour) || !isHourOptional(checkOutHour)) {
+  // Нормализуем значения часов: конвертируем строки в числа, пустые строки в undefined
+  let normalizedCheckInHour: number | undefined = undefined;
+  let normalizedCheckOutHour: number | undefined = undefined;
+
+  if (checkInHour !== undefined && checkInHour !== null) {
+    if (typeof checkInHour === "string") {
+      const trimmed = checkInHour.trim();
+      if (trimmed !== "") {
+        const parsed = parseInt(trimmed, 10);
+        if (!Number.isNaN(parsed)) {
+          normalizedCheckInHour = parsed;
+        }
+      }
+    } else {
+      // Это уже число
+      normalizedCheckInHour = checkInHour;
+    }
+  }
+
+  if (checkOutHour !== undefined && checkOutHour !== null) {
+    if (typeof checkOutHour === "string") {
+      const trimmed = checkOutHour.trim();
+      if (trimmed !== "") {
+        const parsed = parseInt(trimmed, 10);
+        if (!Number.isNaN(parsed)) {
+          normalizedCheckOutHour = parsed;
+        }
+      }
+    } else {
+      // Это уже число
+      normalizedCheckOutHour = checkOutHour;
+    }
+  }
+
+  if (
+    !isHourOptional(normalizedCheckInHour) ||
+    !isHourOptional(normalizedCheckOutHour)
+  ) {
     return res
       .status(400)
       .json({ message: "checkInHour/checkOutHour must be integers in 0..23" });
@@ -82,25 +149,104 @@ export const createAdminBySuperadmin = async (
 
   const hashedPassword = await bcrypt.hash(password, 10);
 
+  // Автоматически получаем координаты, если они не указаны, но есть адрес
+  let finalLatitude = latitude;
+  let finalLongitude = longitude;
+
+  if (
+    (!finalLatitude || !finalLongitude) &&
+    street &&
+    (buildingNumber || province || country)
+  ) {
+    const fullAddress = buildFullAddress({
+      street,
+      buildingNumber,
+      apartmentNumber,
+      province,
+      postalCode,
+      country,
+    });
+
+    try {
+      const coords = await geocodeAddress(fullAddress);
+      if (coords) {
+        finalLatitude = coords.latitude;
+        finalLongitude = coords.longitude;
+      }
+    } catch (error) {
+      // Игнорируем ошибки геокодирования, координаты останутся null
+    }
+  }
+
+  // Обработка телефона: приоритет у новых полей phoneCountryCode/phoneNumber
+  let finalPhoneCountryCode = phoneCountryCode ?? null;
+  let finalPhoneNumber = phoneNumber ?? null;
+
+  // Если указан старый формат phone, пытаемся распарсить
+  if (phone && !finalPhoneCountryCode && !finalPhoneNumber) {
+    const phoneMatch = phone.match(/^(\+\d{1,3})(.*)$/);
+    if (phoneMatch) {
+      finalPhoneCountryCode = phoneMatch[1];
+      finalPhoneNumber = phoneMatch[2].replace(/[^\d]/g, ""); // Убираем все кроме цифр
+    } else {
+      // Если нет кода страны, просто кладем в номер
+      finalPhoneNumber = phone.replace(/[^\d]/g, "");
+    }
+  }
+
   // Create entity with hotel defaults.
   // If hours provided → override; else entity defaults (14/10) will be used.
+  // Нормализуем строковые поля (пустые строки преобразуем в null)
   const newAdmin = adminRepo.create({
     username,
     password: hashedPassword,
     role: ROLES.ADMIN,
     isBlocked: false,
     hotel_name,
-    address,
-    full_name,
-    phone,
-    email,
-    ...(typeof checkInHour !== "undefined" ? { checkInHour } : {}),
-    ...(typeof checkOutHour !== "undefined" ? { checkOutHour } : {}),
+    // Детальная структура адреса (нормализуем пустые строки)
+    street: normalizeNullableString(street) ?? null,
+    buildingNumber: normalizeNullableString(buildingNumber) ?? null,
+    apartmentNumber: normalizeNullableString(apartmentNumber) ?? null,
+    country: normalizeNullableString(country) ?? null,
+    province: normalizeNullableString(province) ?? null,
+    postalCode: normalizeNullableString(postalCode) ?? null,
+    latitude:
+      finalLatitude !== undefined && finalLatitude !== null
+        ? String(finalLatitude) // Сохраняем как строку (decimal в БД)
+        : null,
+    longitude:
+      finalLongitude !== undefined && finalLongitude !== null
+        ? String(finalLongitude)
+        : null,
+    full_name: normalizeNullableString(full_name) ?? undefined,
+    phoneCountryCode: normalizeNullableString(finalPhoneCountryCode) ?? null,
+    phoneNumber: normalizeNullableString(finalPhoneNumber) ?? null,
+    email: normalizeNullableString(email) ?? undefined,
+    // Если logo_url не указан или пустой, используем случайный логотип из вариантов
+    logo_url: normalizeNullableString(logo_url) ?? getRandomHotelLogo(),
+    ...(typeof normalizedCheckInHour !== "undefined"
+      ? { checkInHour: normalizedCheckInHour }
+      : {}),
+    ...(typeof normalizedCheckOutHour !== "undefined"
+      ? { checkOutHour: normalizedCheckOutHour }
+      : {}),
     ...(defaultWifiName ? { defaultWifiName } : {}),
     ...(defaultWifiPassword ? { defaultWifiPassword } : {}),
   });
 
-  const saved = await adminRepo.save(newAdmin);
+  let saved;
+  try {
+    saved = await adminRepo.save(newAdmin);
+  } catch (dbError) {
+    console.error(
+      "Ошибка при сохранении в БД:",
+      dbError instanceof Error ? dbError.message : String(dbError)
+    );
+    return res.status(400).json({
+      message: "Ошибка при сохранении в БД",
+      error: dbError instanceof Error ? dbError.message : String(dbError),
+    });
+  }
 
   res.status(201).json({
     message: `Admin "${saved.username}" created successfully`,
@@ -141,10 +287,25 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
       username: a.username,
       role: a.role,
       hotel_name: a.hotel_name,
-      address: a.address,
+      // Детальная структура адреса
+      street: a.street,
+      buildingNumber: a.buildingNumber,
+      apartmentNumber: a.apartmentNumber,
+      country: a.country,
+      province: a.province,
+      postalCode: a.postalCode,
+      latitude: a.latitude,
+      longitude: a.longitude,
       full_name: a.full_name,
+      // Телефон разделен на код и номер
+      phoneCountryCode: a.phoneCountryCode,
+      phoneNumber: a.phoneNumber,
       logo_url: a.logo_url,
-      phone: a.phone,
+      // Для обратной совместимости формируем phone из компонентов
+      phone:
+        a.phoneCountryCode && a.phoneNumber
+          ? `${a.phoneCountryCode} ${a.phoneNumber}`
+          : a.phoneCountryCode || null,
       email: a.email,
       isBlocked: a.isBlocked,
       checkInHour: a.checkInHour, // 👈 show hotel policy
@@ -157,7 +318,11 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
         username: e.username,
         role: e.role, // завжди "editor"
         full_name: e.full_name,
-        phone: e.phone,
+        // Для обратной совместимости формируем phone из компонентов
+        phone:
+          e.phoneCountryCode && e.phoneNumber
+            ? `${e.phoneCountryCode} ${e.phoneNumber}`
+            : e.phoneCountryCode || null,
         email: e.email,
         isBlocked: e.isBlocked,
         createdAt: e.createdAt,
@@ -182,7 +347,11 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
       username: e.username,
       role: e.role, // "editor"
       full_name: e.full_name,
-      phone: e.phone,
+      // Для обратной совместимости формируем phone из компонентов
+      phone:
+        e.phoneCountryCode && e.phoneNumber
+          ? `${e.phoneCountryCode} ${e.phoneNumber}`
+          : e.phoneCountryCode || null,
       email: e.email,
       isBlocked: e.isBlocked,
       createdAt: e.createdAt,
@@ -285,15 +454,25 @@ export const loginAdmin = async (req: Request, res: Response) => {
  * Copies hotel profile (including policy hours) from owner admin.
  */
 export const createEditorAdmin = async (req: AuthRequest, res: Response) => {
-  const { username, password, confirmPassword, full_name, phone, email } =
-    req.body as {
-      username: string;
-      password: string;
-      confirmPassword: string;
-      full_name?: string;
-      phone?: string;
-      email?: string;
-    };
+  const {
+    username,
+    password,
+    confirmPassword,
+    full_name,
+    phoneCountryCode,
+    phoneNumber,
+    phone, // Для обратной совместимости
+    email,
+  } = req.body as {
+    username: string;
+    password: string;
+    confirmPassword: string;
+    full_name?: string;
+    phoneCountryCode?: string | null;
+    phoneNumber?: string | null;
+    phone?: string; // Для обратной совместимости
+    email?: string;
+  };
   const creatorId = req.user!.adminId;
 
   // только admin может создавать редакторов
@@ -331,6 +510,31 @@ export const createEditorAdmin = async (req: AuthRequest, res: Response) => {
   // Copy hotel profile + policy hours from owner
   const hotelData = copyHotelDataFromAdmin(creatorAdmin);
 
+  // Обработка телефона: приоритет у новых полей phoneCountryCode/phoneNumber
+  let finalPhoneCountryCode = phoneCountryCode ?? null;
+  let finalPhoneNumber = phoneNumber ?? null;
+
+  // Если указан старый формат phone, пытаемся распарсить
+  if (phone && !finalPhoneCountryCode && !finalPhoneNumber) {
+    const phoneMatch = phone.match(/^(\+\d{1,3})(.*)$/);
+    if (phoneMatch) {
+      finalPhoneCountryCode = phoneMatch[1];
+      finalPhoneNumber = phoneMatch[2].replace(/[^\d]/g, "");
+    } else {
+      finalPhoneNumber = phone.replace(/[^\d]/g, "");
+    }
+  }
+
+  // Если телефон не указан, копируем из данных отеля (hotelData уже содержит phoneCountryCode и phoneNumber)
+  if (
+    !finalPhoneCountryCode &&
+    !finalPhoneNumber &&
+    hotelData.phoneCountryCode
+  ) {
+    finalPhoneCountryCode = hotelData.phoneCountryCode ?? null;
+    finalPhoneNumber = hotelData.phoneNumber ?? null;
+  }
+
   // Создаём нового редактора с данными отеля и создателя
   const newEditor = adminRepo.create({
     username,
@@ -338,7 +542,8 @@ export const createEditorAdmin = async (req: AuthRequest, res: Response) => {
     role: ROLES.EDITOR,
     createdBy: creatorAdmin,
     full_name,
-    phone,
+    phoneCountryCode: finalPhoneCountryCode,
+    phoneNumber: finalPhoneNumber,
     email,
     ...hotelData,
   });
@@ -486,18 +691,38 @@ export const updateAdminHotelProfile = async (
   // Строгий тип баду (усі поля опційні)
   const {
     hotel_name,
-    address,
+    // Детальная структура адреса
+    street,
+    buildingNumber,
+    apartmentNumber,
+    country,
+    province,
+    postalCode,
+    latitude,
+    longitude,
     full_name,
-    phone,
+    // Телефон разделен на код и номер
+    phoneCountryCode,
+    phoneNumber,
+    phone, // Для обратной совместимости
     email,
     logo_url,
     checkInHour,
     checkOutHour,
   }: {
     hotel_name?: string;
-    address?: string;
+    street?: string | null;
+    buildingNumber?: string | null;
+    apartmentNumber?: string | null;
+    country?: string | null;
+    province?: string | null;
+    postalCode?: string | null;
+    latitude?: string | number | null;
+    longitude?: string | number | null;
     full_name?: string | null;
-    phone?: string | null;
+    phoneCountryCode?: string | null;
+    phoneNumber?: string | null;
+    phone?: string | null; // Для обратной совместимости
     email?: string | null;
     logo_url?: string | null;
     checkInHour?: number | null;
@@ -524,18 +749,113 @@ export const updateAdminHotelProfile = async (
 
   // Акуратно оновлюємо тільки передані поля
   if (typeof hotel_name !== "undefined") admin.hotel_name = hotel_name;
-  if (typeof address !== "undefined") admin.address = address;
+
+  // Обновление детальной структуры адреса
+  const streetNorm = normalizeNullableString(street);
+  if (typeof streetNorm !== "undefined") admin.street = streetNorm;
+
+  const buildingNumberNorm = normalizeNullableString(buildingNumber);
+  if (typeof buildingNumberNorm !== "undefined")
+    admin.buildingNumber = buildingNumberNorm;
+
+  const apartmentNumberNorm = normalizeNullableString(apartmentNumber);
+  if (typeof apartmentNumberNorm !== "undefined")
+    admin.apartmentNumber = apartmentNumberNorm;
+
+  const countryNorm = normalizeNullableString(country);
+  if (typeof countryNorm !== "undefined") admin.country = countryNorm;
+
+  const provinceNorm = normalizeNullableString(province);
+  if (typeof provinceNorm !== "undefined") admin.province = provinceNorm;
+
+  const postalCodeNorm = normalizeNullableString(postalCode);
+  if (typeof postalCodeNorm !== "undefined") admin.postalCode = postalCodeNorm;
+
+  // Автоматически получаем координаты, если они не указаны, но адрес изменился
+  let shouldGeocode = false;
+  if (
+    (typeof street !== "undefined" ||
+      typeof buildingNumber !== "undefined" ||
+      typeof province !== "undefined" ||
+      typeof country !== "undefined") &&
+    (!latitude || !longitude)
+  ) {
+    shouldGeocode = true;
+  }
+
+  // Координаты могут быть числом или строкой
+  if (typeof latitude !== "undefined") {
+    admin.latitude =
+      latitude !== null && latitude !== undefined ? String(latitude) : null;
+  }
+  if (typeof longitude !== "undefined") {
+    admin.longitude =
+      longitude !== null && longitude !== undefined ? String(longitude) : null;
+  }
+
+  // Если координаты не указаны, но есть адрес - пытаемся получить их автоматически
+  if (
+    shouldGeocode &&
+    admin.street &&
+    (admin.buildingNumber || admin.province || admin.country)
+  ) {
+    const fullAddress = buildFullAddress({
+      street: admin.street,
+      buildingNumber: admin.buildingNumber,
+      apartmentNumber: admin.apartmentNumber,
+      province: admin.province,
+      postalCode: admin.postalCode,
+      country: admin.country,
+    });
+
+    try {
+      const coords = await geocodeAddress(fullAddress);
+      if (coords) {
+        admin.latitude = coords.latitude;
+        admin.longitude = coords.longitude;
+        console.log(
+          `✅ Координаты обновлены для адреса: ${fullAddress} -> ${coords.latitude}, ${coords.longitude}`
+        );
+      }
+    } catch (error) {
+      console.warn("⚠️ Не удалось получить координаты:", error);
+    }
+  }
+
+  // Обработка телефона
+  if (typeof phoneCountryCode !== "undefined") {
+    admin.phoneCountryCode = normalizeNullableString(phoneCountryCode) ?? null;
+  }
+  if (typeof phoneNumber !== "undefined") {
+    admin.phoneNumber = normalizeNullableString(phoneNumber) ?? null;
+  }
+
+  // Если указан старый формат phone и новые поля не указаны, пытаемся распарсить
+  if (
+    phone &&
+    typeof phoneCountryCode === "undefined" &&
+    typeof phoneNumber === "undefined"
+  ) {
+    const phoneMatch = phone.match(/^(\+\d{1,3})(.*)$/);
+    if (phoneMatch) {
+      admin.phoneCountryCode = phoneMatch[1];
+      admin.phoneNumber = phoneMatch[2].replace(/[^\d]/g, "");
+    } else {
+      admin.phoneNumber = phone.replace(/[^\d]/g, "");
+    }
+  }
+
   const fullNameNorm = normalizeNullableString(full_name);
   if (typeof fullNameNorm !== "undefined") admin.full_name = fullNameNorm;
-
-  const phoneNorm = normalizeNullableString(phone);
-  if (typeof phoneNorm !== "undefined") admin.phone = phoneNorm;
 
   const emailNorm = normalizeNullableString(email);
   if (typeof emailNorm !== "undefined") admin.email = emailNorm;
 
+  // Если logo_url не указан или пустой, используем случайный логотип из вариантов
   const logoNorm = normalizeNullableString(logo_url);
-  if (typeof logoNorm !== "undefined") admin.logo_url = logoNorm;
+  if (typeof logoNorm !== "undefined") {
+    admin.logo_url = logoNorm || getRandomHotelLogo();
+  }
   if (typeof checkInHour !== "undefined") admin.checkInHour = checkInHour;
   if (typeof checkOutHour !== "undefined") admin.checkOutHour = checkOutHour;
 
@@ -547,9 +867,24 @@ export const updateAdminHotelProfile = async (
       id: saved.id,
       username: saved.username,
       hotel_name: saved.hotel_name,
-      address: saved.address,
+      // Детальная структура адреса
+      street: saved.street,
+      buildingNumber: saved.buildingNumber,
+      apartmentNumber: saved.apartmentNumber,
+      country: saved.country,
+      province: saved.province,
+      postalCode: saved.postalCode,
+      latitude: saved.latitude,
+      longitude: saved.longitude,
+      // Телефон разделен на код и номер
+      phoneCountryCode: saved.phoneCountryCode,
+      phoneNumber: saved.phoneNumber,
+      // Для обратной совместимости формируем phone
+      phone:
+        saved.phoneCountryCode && saved.phoneNumber
+          ? `${saved.phoneCountryCode} ${saved.phoneNumber}`
+          : saved.phoneCountryCode || null,
       full_name: saved.full_name,
-      phone: saved.phone,
       email: saved.email,
       logo_url: saved.logo_url,
       checkInHour: saved.checkInHour,

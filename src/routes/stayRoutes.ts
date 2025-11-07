@@ -138,11 +138,15 @@ import {
   getStaysByStatus,
   getArrivalsToday,
   getDeparturesToday,
+  searchStays,
+  getStayById,
+  getStayHistory,
 } from "../controllers/stayQuery.controller";
 import {
-  manualCheckIn,
-  manualCheckOut,
-  manualCancel,
+  checkInStay,
+  checkOutStay,
+  cancelStay,
+  updateStayStatus,
 } from "../controllers/stayOps.controller";
 
 const router = Router();
@@ -188,17 +192,38 @@ router.get(
 
 /**
  * Manual operations on a specific stay
- * POST /stays/:id/check-in
- * POST /stays/:id/check-out
- * POST /stays/:id/cancel
+ * PATCH /stays/:id/checkin
+ * PATCH /stays/:id/checkout
+ * PATCH /stays/:id/cancel
+ * PUT /stays/:id/status — update stay status and sync room status
  */
-router.post("/:id/check-in", authenticateToken, isEditorOrAdmin, manualCheckIn);
-router.post(
-  "/:id/check-out",
+router.patch("/:id/checkin", authenticateToken, isEditorOrAdmin, checkInStay);
+router.patch(
+  "/:id/checkout",
   authenticateToken,
   isEditorOrAdmin,
-  manualCheckOut
+  checkOutStay
 );
-router.post("/:id/cancel", authenticateToken, isEditorOrAdmin, manualCancel);
+router.patch("/:id/cancel", authenticateToken, isEditorOrAdmin, cancelStay);
+router.put("/:id/status", authenticateToken, isEditorOrAdmin, updateStayStatus);
+
+/**
+ * Search stays by guest name or updatedBy user
+ * GET /stays/search?guest=doe&changedBy=frontdesk-1
+ */
+router.get("/search", authenticateToken, isEditorOrAdmin, searchStays);
+
+/**
+ * Get stay status change history
+ * GET /stays/:id/history
+ * Важливо: має бути перед /:id, інакше Express спробує обробити /history як id
+ */
+router.get("/:id/history", authenticateToken, isEditorOrAdmin, getStayHistory);
+
+/**
+ * Get stay by ID
+ * GET /stays/:id
+ */
+router.get("/:id", authenticateToken, isEditorOrAdmin, getStayById);
 
 export default router;

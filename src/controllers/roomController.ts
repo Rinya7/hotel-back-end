@@ -3,10 +3,15 @@ import { Response } from "express";
 import { AppDataSource } from "../config/data-source";
 import { Room } from "../entities/Room";
 import { Admin } from "../entities/Admin";
+import { RoomStatusLog } from "../entities/RoomStatusLog";
+import { RoomCleaningLog } from "../entities/RoomCleaningLog";
 import { AuthRequest } from "../middlewares/authMiddleware";
 import { isHourOrNull } from "../utils/hours";
 import { getOwnerAdminId } from "../utils/owner";
 import { ROLES } from "../auth/roles";
+import { updateRoomStatus } from "./stayOps.controller";
+
+type RoomStatus = "free" | "booked" | "occupied" | "cleaning";
 
 /** Narrow request body types (strict, no any) */
 interface CreateRoomBody {
@@ -44,6 +49,22 @@ function normalizeNullableString(v: unknown): string | null {
   if (typeof v !== "string") return null;
   const trimmed = v.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+async function resolveRoomActor(
+  req: AuthRequest
+): Promise<{ username: string; role: "admin" | "editor" | "system" }> {
+  const user = req.user;
+  if (!user || (user.role !== "admin" && user.role !== "editor")) {
+    return { username: "system", role: "system" };
+  }
+
+  const adminRepo = AppDataSource.getRepository(Admin);
+  const admin = await adminRepo.findOne({ where: { id: user.sub } });
+  return {
+    username: admin?.username ?? "system",
+    role: user.role,
+  };
 }
 
 /** GET /rooms/all — superadmin only */
@@ -323,7 +344,10 @@ export const updateRoom = async (req: AuthRequest, res: Response) => {
  * PUT /number/:roomNumber/status — manually set room status
  * NOTE: This may be overridden later by the cron if inconsistent with stays.
  */
-export const updateRoomStatus = async (req: AuthRequest, res: Response) => {
+export const changeRoomStatusManual = async (
+  req: AuthRequest,
+  res: Response
+) => {
   const ownerAdminId = getOwnerAdminId(req);
   const roomNumber = req.params.roomNumber;
   const { status } = req.body as { status: "free" | "booked" | "occupied" };
@@ -379,4 +403,157 @@ export const deleteRoom = async (req: AuthRequest, res: Response) => {
     message: `Room ${roomNumber} deleted successfully`,
     roomNumber,
   });
+};
+
+/** GET /rooms/number/:roomNumber/history — історія змін статусів кімнати */
+export const getRoomHistory = async (req: AuthRequest, res: Response) => {
+  try {
+    const ownerAdminId = getOwnerAdminId(req);
+    const { roomNumber } = req.params;
+
+    const roomRepo = AppDataSource.getRepository(Room);
+    const room = await roomRepo.findOne({
+      where: { roomNumber, admin: { id: ownerAdminId } },
+      relations: ["statusLogs", "statusLogs.stay"],
+    });
+
+    if (!room) {
+      return res.status(404).json({ message: "Room not found" });
+    }
+
+    // Сортуємо логи за датою (новіші спочатку)
+    const sortedLogs = room.statusLogs.sort(
+      (a, b) => b.changedAt.getTime() - a.changedAt.getTime()
+    );
+
+    // Форматуємо логи для відповіді з entityLabel та entityLink
+    const logs = sortedLogs.map((log) => ({
+      id: log.id,
+      oldStatus: log.oldStatus,
+      newStatus: log.newStatus,
+      changedAt: log.changedAt,
+      changedBy: log.changedBy,
+      changedByRole: log.changedByRole,
+      stay: log.stay
+        ? {
+            id: log.stay.id,
+            mainGuestName: log.stay.mainGuestName,
+          }
+        : null,
+      // Додаємо entityLabel та entityLink для пов'язаного проживання
+      entityLabel: log.stay ? log.stay.mainGuestName : undefined,
+      entityLink: log.stay ? `/stays/${log.stay.id}` : undefined,
+      comment: log.comment || null,
+      roomId: room.id,
+    }));
+
+    return res.json({
+      roomId: room.id,
+      roomNumber: room.roomNumber,
+      logs,
+    });
+  } catch (error) {
+    console.error("Помилка при отриманні room history:", error);
+    // Повертаємо порожній результат (той самий формат, що й при успіху)
+    return res.json({
+      roomId: 0,
+      roomNumber: req.params.roomNumber,
+      logs: [],
+    });
+  }
+};
+
+export const markRoomCleaned = async (req: AuthRequest, res: Response) => {
+  const ownerAdminId = getOwnerAdminId(req);
+  const roomId = Number(req.params.id);
+  const { notes } = (req.body ?? {}) as { notes?: string | null };
+
+  const roomRepo = AppDataSource.getRepository(Room);
+  const room = await roomRepo.findOne({
+    where: { id: roomId, admin: { id: ownerAdminId } },
+    relations: ["stays"],
+  });
+
+  if (!room) {
+    return res.status(404).json({ message: "Room not found" });
+  }
+
+  if (room.status !== "cleaning") {
+    return res.status(400).json({ message: "Room is not in cleaning state" });
+  }
+
+  const actor = await resolveRoomActor(req);
+  const trimmedNotes = notes?.toString().trim() ?? "";
+  const cleanedAt = new Date();
+
+  const previousStatus = room.status;
+  room.status = "free";
+  room.lastCleanedAt = cleanedAt;
+  room.lastCleanedBy = actor.username;
+  await roomRepo.save(room);
+
+  const cleaningRepo = AppDataSource.getRepository(RoomCleaningLog);
+  const cleaningLog = cleaningRepo.create({
+    room,
+    cleanedBy: actor.username,
+    cleanedByRole: actor.role === "system" ? "system" : actor.role,
+    notes: trimmedNotes.length > 0 ? trimmedNotes : null,
+  });
+  await cleaningRepo.save(cleaningLog);
+
+  const roomStatusLogRepo = AppDataSource.getRepository(RoomStatusLog);
+  const statusLog = roomStatusLogRepo.create({
+    room,
+    oldStatus: previousStatus,
+    newStatus: room.status,
+    changedBy: actor.username,
+    changedByRole: actor.role,
+    comment: trimmedNotes.length > 0 ? trimmedNotes : null,
+  });
+  await roomStatusLogRepo.save(statusLog);
+
+  const roomUpdateActor: Parameters<typeof updateRoomStatus>[1] = {
+    username: actor.username,
+    stayRole: actor.role === "system" ? "guest" : actor.role,
+    roomRole: actor.role,
+  };
+
+  const recalculatedRoom = await updateRoomStatus(room.id, roomUpdateActor, {
+    comment: trimmedNotes.length > 0 ? trimmedNotes : null,
+    skipWhenCleaning: false,
+  });
+
+  return res.json({
+    message: "Room marked as cleaned",
+    room: recalculatedRoom ?? room,
+  });
+};
+
+export const getRoomStats = async (req: AuthRequest, res: Response) => {
+  const ownerAdminId = getOwnerAdminId(req);
+  const roomRepo = AppDataSource.getRepository(Room);
+
+  const rawStats = await roomRepo
+    .createQueryBuilder("room")
+    .select("room.status", "status")
+    .addSelect("COUNT(room.id)", "total")
+    .where("room.adminId = :adminId", { adminId: ownerAdminId })
+    .groupBy("room.status")
+    .getRawMany<{ status: RoomStatus; total: string }>();
+
+  const stats: Record<RoomStatus, number> = {
+    free: 0,
+    booked: 0,
+    occupied: 0,
+    cleaning: 0,
+  };
+
+  for (const row of rawStats) {
+    const status = row.status;
+    if (status in stats) {
+      stats[status as RoomStatus] = Number(row.total) || 0;
+    }
+  }
+
+  return res.json(stats);
 };

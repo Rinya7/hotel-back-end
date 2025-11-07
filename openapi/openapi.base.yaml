@@ -27,6 +27,8 @@ tags:
     description: Ручні check-in/out/cancel
   - name: Stay Queries
     description: Добірки для дашборда (за статусом, заїзди/виїзди сьогодні)
+  - name: Audit
+    description: Універсальні audit logs для Room та Stay
 
 components:
   securitySchemes:
@@ -87,15 +89,26 @@ components:
 
     CreateAdminRequest:
       type: object
-      required: [username, password, confirmPassword, hotel_name, address]
+      required: [username, password, confirmPassword, hotel_name, street]
       properties:
         username: { type: string }
         password: { type: string }
         confirmPassword: { type: string }
         hotel_name: { type: string }
-        address: { type: string }
+        # Детальная структура адреса
+        street: { type: string, description: "Улица (обязательное поле)" }
+        buildingNumber: { type: string, nullable: true }
+        apartmentNumber: { type: string, nullable: true }
+        country: { type: string, nullable: true, description: "Код страны (например, IT, UA)" }
+        province: { type: string, nullable: true, description: "Провинция/Регион" }
+        postalCode: { type: string, nullable: true }
+        latitude: { type: string, nullable: true, description: "Широта (автоматически получается если не указана)" }
+        longitude: { type: string, nullable: true, description: "Долгота (автоматически получается если не указана)" }
         full_name: { type: string, nullable: true }
-        phone: { type: string, nullable: true }
+        # Телефон разделен на код страны и номер
+        phoneCountryCode: { type: string, nullable: true, description: "Код страны телефона (например, +39, +380)" }
+        phoneNumber: { type: string, nullable: true, description: "Номер телефона без кода страны" }
+        phone: { type: string, nullable: true, description: "Старое поле для обратной совместимости" }
         email: { type: string, nullable: true }
         checkInHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
         checkOutHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
@@ -119,9 +132,20 @@ components:
       description: "Будь-яке з полів; не всі обов'язкові"
       properties:
         hotel_name: { type: string }
-        address: { type: string }
+        # Детальная структура адреса
+        street: { type: string, nullable: true }
+        buildingNumber: { type: string, nullable: true }
+        apartmentNumber: { type: string, nullable: true }
+        country: { type: string, nullable: true }
+        province: { type: string, nullable: true }
+        postalCode: { type: string, nullable: true }
+        latitude: { type: string, nullable: true }
+        longitude: { type: string, nullable: true }
         full_name: { type: string, nullable: true }
-        phone: { type: string, nullable: true }
+        # Телефон разделен на код страны и номер
+        phoneCountryCode: { type: string, nullable: true }
+        phoneNumber: { type: string, nullable: true }
+        phone: { type: string, nullable: true, description: "Старое поле для обратной совместимости" }
         email: { type: string, nullable: true }
         logo_url: { type: string, nullable: true }
         checkInHour: { type: integer, minimum: 0, maximum: 23, nullable: true }
@@ -139,9 +163,20 @@ components:
             id: { type: integer }
             username: { type: string }
             hotel_name: { type: string, nullable: true }
-            address: { type: string, nullable: true }
+            # Детальная структура адреса
+            street: { type: string, nullable: true }
+            buildingNumber: { type: string, nullable: true }
+            apartmentNumber: { type: string, nullable: true }
+            country: { type: string, nullable: true }
+            province: { type: string, nullable: true }
+            postalCode: { type: string, nullable: true }
+            latitude: { type: string, nullable: true }
+            longitude: { type: string, nullable: true }
             full_name: { type: string, nullable: true }
-            phone: { type: string, nullable: true }
+            # Телефон разделен на код страны и номер
+            phoneCountryCode: { type: string, nullable: true }
+            phoneNumber: { type: string, nullable: true }
+            phone: { type: string, nullable: true, description: "Для обратной совместимости, формируется из phoneCountryCode и phoneNumber" }
             email: { type: string, nullable: true }
             logo_url: { type: string, nullable: true }
             checkInHour: { type: integer, nullable: true }
@@ -218,7 +253,7 @@ components:
     # ==== ROOMS ====
     RoomStatus:
       type: string
-      enum: [free, booked, occupied]
+      enum: [free, booked, occupied, cleaning]
 
     Room:
       type: object
@@ -234,6 +269,8 @@ components:
         wifiPassword: { type: string, nullable: true }
         qrBarUrl: { type: string, nullable: true }
         mapPosition: { type: string, nullable: true }
+        lastCleanedAt: { type: string, format: date-time, nullable: true }
+        lastCleanedBy: { type: string, nullable: true }
 
     CreateRoomRequest:
       type: object
@@ -280,6 +317,7 @@ components:
         free: { type: integer }
         booked: { type: integer }
         occupied: { type: integer }
+        cleaning: { type: integer }
 
       # ==== AVAILABILITY ====
     AvailabilityConflict:
@@ -343,6 +381,16 @@ components:
         balance:
           oneOf: [{ type: number }, { type: string }]
         status: { $ref: "#/components/schemas/StayStatus" }
+        createdBy:
+          type: string
+          nullable: true
+        updatedBy:
+          type: string
+          nullable: true
+        updatedByRole:
+          type: string
+          nullable: true
+          enum: [guest, admin, editor]
 
     CreateStayForRoomRequest:
       type: object
@@ -433,6 +481,10 @@ paths:
     $ref: "./paths/rooms.yaml#/rooms_update_delete"
   /rooms/number/{roomNumber}/status:
     $ref: "./paths/rooms.yaml#/rooms_update_status"
+  /rooms/{id}/cleaned:
+    $ref: "./paths/rooms.yaml#/rooms_cleaned"
+  /rooms/number/{roomNumber}/history:
+    $ref: "./paths/rooms.yaml#/rooms_history"
 
   # --- Policy Hours (bulk) ---
   /rooms/policy-hours/bulk:
@@ -459,12 +511,14 @@ paths:
     $ref: "./paths/stays.yaml#/stays_close"
 
   # --- Stay Ops (manual) ---
-  /stays/{id}/check-in:
+  /stays/{id}/checkin:
     $ref: "./paths/stay-ops.yaml#/stay_check_in"
-  /stays/{id}/check-out:
+  /stays/{id}/checkout:
     $ref: "./paths/stay-ops.yaml#/stay_check_out"
   /stays/{id}/cancel:
     $ref: "./paths/stay-ops.yaml#/stay_cancel"
+  /stays/{id}/status:
+    $ref: "./paths/stay-ops.yaml#/stay_update_status"
 
   # --- Stay Queries ---
   /stays/status/{status}:
@@ -473,3 +527,13 @@ paths:
     $ref: "./paths/stay-queries.yaml#/stays_arrivals_today"
   /stays/today/departures:
     $ref: "./paths/stay-queries.yaml#/stays_departures_today"
+  /stays/search:
+    $ref: "./paths/stay-queries.yaml#/stays_search"
+  /stays/{id}:
+    $ref: "./paths/stay-queries.yaml#/stay_by_id"
+  /stays/{id}/history:
+    $ref: "./paths/stay-queries.yaml#/stay_history"
+
+  # --- Audit Logs ---
+  /audit/logs:
+    $ref: "./paths/audit.yaml#/audit_logs"

@@ -69,7 +69,7 @@ rooms_stats:
   get:
     security: [{ bearerAuth: [] }]
     tags: [Availability & Stats]
-    summary: Статистика по статусам кімнат
+    summary: Кількість кімнат за статусами (free/booked/occupied/cleaning)
     responses:
       "200":
         description: OK

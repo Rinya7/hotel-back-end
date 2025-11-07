@@ -82,13 +82,14 @@ async function calcAvailability(
   // 4) Формуємо відповідь
   const data = rooms.map((r) => {
     const conflictsCount = conflictsMap.get(r.id) ?? 0;
+    const available = conflictsCount === 0 && r.status !== "cleaning";
     const base = {
       roomId: r.id,
       roomNumber: r.roomNumber,
       floor: r.floor,
       capacity: r.capacity,
       currentStatus: r.status,
-      available: conflictsCount === 0,
+      available,
       conflictsCount,
     };
     if (details && conflictsDetailsMap) {

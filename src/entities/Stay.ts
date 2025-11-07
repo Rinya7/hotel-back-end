@@ -4,10 +4,13 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   CreateDateColumn,
   UpdateDateColumn,
 } from "typeorm";
 import { Room } from "./Room";
+import { StayStatusLog } from "./StayStatusLog";
+import { RoomStatusLog } from "./RoomStatusLog";
 
 @Entity()
 export class Stay {
@@ -38,6 +41,25 @@ export class Stay {
     default: "booked",
   })
   status!: "booked" | "occupied" | "completed" | "cancelled";
+
+  // Аудит: хто створив бронювання
+  @Column({ type: "varchar", length: 50, nullable: true })
+  createdBy?: string; // username або "guest"
+
+  // Аудит: хто востаннє змінював статус
+  @Column({ type: "varchar", length: 50, nullable: true })
+  updatedBy?: string; // username або "guest"
+
+  @Column({ type: "varchar", length: 20, nullable: true })
+  updatedByRole?: "guest" | "admin" | "editor";
+
+  // Зв'язок з логами змін статусів Stay
+  @OneToMany(() => StayStatusLog, (log) => log.stay)
+  statusLogs!: StayStatusLog[];
+
+  // Зв'язок з логами змін статусів Room (якщо зміна була через Stay)
+  @OneToMany(() => RoomStatusLog, (log) => log.stay)
+  roomStatusLogs!: RoomStatusLog[];
 
   @CreateDateColumn()
   createdAt!: Date;

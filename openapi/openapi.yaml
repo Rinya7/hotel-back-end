@@ -24,6 +24,8 @@ tags:
     description: Ручні check-in/out/cancel
   - name: Stay Queries
     description: 'Добірки для дашборда (за статусом, заїзди/виїзди сьогодні)'
+  - name: Audit
+    description: Універсальні audit logs для Room та Stay
 components:
   securitySchemes:
     bearerAuth:
@@ -105,7 +107,7 @@ components:
         - password
         - confirmPassword
         - hotel_name
-        - address
+        - street
       properties:
         username:
           type: string
@@ -115,14 +117,49 @@ components:
           type: string
         hotel_name:
           type: string
-        address:
+        street:
           type: string
+          description: Улица (обязательное поле)
+        buildingNumber:
+          type: string
+          nullable: true
+        apartmentNumber:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+          description: 'Код страны (например, IT, UA)'
+        province:
+          type: string
+          nullable: true
+          description: Провинция/Регион
+        postalCode:
+          type: string
+          nullable: true
+        latitude:
+          type: string
+          nullable: true
+          description: Широта (автоматически получается если не указана)
+        longitude:
+          type: string
+          nullable: true
+          description: Долгота (автоматически получается если не указана)
         full_name:
           type: string
           nullable: true
+        phoneCountryCode:
+          type: string
+          nullable: true
+          description: 'Код страны телефона (например, +39, +380)'
+        phoneNumber:
+          type: string
+          nullable: true
+          description: Номер телефона без кода страны
         phone:
           type: string
           nullable: true
+          description: Старое поле для обратной совместимости
         email:
           type: string
           nullable: true
@@ -166,14 +203,43 @@ components:
       properties:
         hotel_name:
           type: string
-        address:
+        street:
           type: string
+          nullable: true
+        buildingNumber:
+          type: string
+          nullable: true
+        apartmentNumber:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        province:
+          type: string
+          nullable: true
+        postalCode:
+          type: string
+          nullable: true
+        latitude:
+          type: string
+          nullable: true
+        longitude:
+          type: string
+          nullable: true
         full_name:
+          type: string
+          nullable: true
+        phoneCountryCode:
+          type: string
+          nullable: true
+        phoneNumber:
           type: string
           nullable: true
         phone:
           type: string
           nullable: true
+          description: Старое поле для обратной совместимости
         email:
           type: string
           nullable: true
@@ -211,15 +277,43 @@ components:
             hotel_name:
               type: string
               nullable: true
-            address:
+            street:
+              type: string
+              nullable: true
+            buildingNumber:
+              type: string
+              nullable: true
+            apartmentNumber:
+              type: string
+              nullable: true
+            country:
+              type: string
+              nullable: true
+            province:
+              type: string
+              nullable: true
+            postalCode:
+              type: string
+              nullable: true
+            latitude:
+              type: string
+              nullable: true
+            longitude:
               type: string
               nullable: true
             full_name:
               type: string
               nullable: true
+            phoneCountryCode:
+              type: string
+              nullable: true
+            phoneNumber:
+              type: string
+              nullable: true
             phone:
               type: string
               nullable: true
+              description: 'Для обратной совместимости, формируется из phoneCountryCode и phoneNumber'
             email:
               type: string
               nullable: true
@@ -379,6 +473,7 @@ components:
         - free
         - booked
         - occupied
+        - cleaning
     Room:
       type: object
       properties:
@@ -408,6 +503,13 @@ components:
           type: string
           nullable: true
         mapPosition:
+          type: string
+          nullable: true
+        lastCleanedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastCleanedBy:
           type: string
           nullable: true
     CreateRoomRequest:
@@ -503,6 +605,8 @@ components:
           type: integer
         occupied:
           type: integer
+        cleaning:
+          type: integer
     AvailabilityConflict:
       type: object
       properties:
@@ -592,6 +696,19 @@ components:
             - type: string
         status:
           $ref: '#/components/schemas/StayStatus'
+        createdBy:
+          type: string
+          nullable: true
+        updatedBy:
+          type: string
+          nullable: true
+        updatedByRole:
+          type: string
+          nullable: true
+          enum:
+            - guest
+            - admin
+            - editor
     CreateStayForRoomRequest:
       type: object
       required:
@@ -1028,6 +1145,109 @@ paths:
       responses:
         '200':
           description: Updated
+  '/rooms/{id}/cleaned':
+    patch:
+      security:
+        - bearerAuth: []
+      tags:
+        - Rooms
+      summary: Позначити кімнату як прибрану (cleaning → free)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+                  nullable: true
+                  description: Коментар/нотатка про прибирання
+      responses:
+        '200':
+          description: Room cleaned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  room:
+                    $ref: '#/components/schemas/Room'
+        '400':
+          description: Room is not in cleaning state
+        '404':
+          description: Room not found
+  '/rooms/number/{roomNumber}/history':
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Rooms
+      summary: Історія змін статусів кімнати
+      parameters:
+        - name: roomNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  roomNumber:
+                    type: string
+                  logs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: integer
+                        oldStatus:
+                          type: string
+                        newStatus:
+                          type: string
+                        changedAt:
+                          type: string
+                          format: date-time
+                        changedBy:
+                          type: string
+                          nullable: true
+                        changedByRole:
+                          type: string
+                          nullable: true
+                          enum:
+                            - system
+                            - admin
+                            - editor
+                        stay:
+                          nullable: true
+                          type: object
+                          properties:
+                            id:
+                              type: integer
+                            mainGuestName:
+                              type: string
+                        entityLabel:
+                          type: string
+                          nullable: true
+                        entityLink:
+                          type: string
+                          nullable: true
+        '404':
+          description: Room not found
   /rooms/policy-hours/bulk:
     put:
       security:
@@ -1194,7 +1414,7 @@ paths:
         - bearerAuth: []
       tags:
         - Availability & Stats
-      summary: Статистика по статусам кімнат
+      summary: Кількість кімнат за статусами (free/booked/occupied/cleaning)
       responses:
         '200':
           description: OK
@@ -1276,6 +1496,52 @@ paths:
           description: Created
         '409':
           description: Conflicting dates
+    put:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stays
+      summary: Оновити проживання за датами (checkIn/checkOut)
+      parameters:
+        - name: roomNumber
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: checkIn
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: checkOut
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStayByDatesRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  stay:
+                    $ref: '#/components/schemas/Stay'
+        '404':
+          description: Stay not found
+        '409':
+          description: Conflicting dates
   '/rooms/number/{roomNumber}/stays/close':
     put:
       security:
@@ -1310,13 +1576,13 @@ paths:
       responses:
         '200':
           description: Closed
-  '/stays/{id}/check-in':
-    post:
+  '/stays/{id}/checkin':
+    patch:
       security:
         - bearerAuth: []
       tags:
         - Stay Ops
-      summary: Позначити як occupied (ручний check-in)
+      summary: Ручний check-in (booked → occupied або walk-in)
       parameters:
         - name: id
           in: path
@@ -1330,18 +1596,22 @@ paths:
             schema:
               type: object
               properties:
-                force:
-                  type: boolean
+                comment:
+                  type: string
+                  nullable: true
+                  description: Коментар до логу (необов'язковий)
       responses:
         '200':
           description: OK
-  '/stays/{id}/check-out':
-    post:
+        '400':
+          description: Room not available for check-in
+  '/stays/{id}/checkout':
+    patch:
       security:
         - bearerAuth: []
       tags:
         - Stay Ops
-      summary: Позначити як completed (ручний check-out)
+      summary: Ручний check-out (occupied → completed → cleaning)
       parameters:
         - name: id
           in: path
@@ -1355,13 +1625,17 @@ paths:
             schema:
               type: object
               properties:
-                force:
-                  type: boolean
+                comment:
+                  type: string
+                  nullable: true
+                  description: Коментар до логу (необов'язковий)
       responses:
         '200':
           description: OK
+        '400':
+          description: Stay must be occupied before check-out
   '/stays/{id}/cancel':
-    post:
+    patch:
       security:
         - bearerAuth: []
       tags:
@@ -1373,6 +1647,50 @@ paths:
           required: true
           schema:
             type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment:
+                  type: string
+                  nullable: true
+                  description: Коментар причини скасування
+      responses:
+        '200':
+          description: OK
+        '400':
+          description: Only booked stay can be cancelled
+  '/stays/{id}/status':
+    put:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Ops
+      summary: Оновити статус проживання (з автоматичною синхронізацією кімнати)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  $ref: '#/components/schemas/StayStatus'
+                comment:
+                  type: string
+                  nullable: true
+                  description: Обов'язковий при статусі cancelled для адміністраторів/редакторів
       responses:
         '200':
           description: OK
@@ -1412,3 +1730,226 @@ paths:
       responses:
         '200':
           description: OK
+  /stays/search:
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Queries
+      summary: Пошук проживань по гостю або користувачу
+      parameters:
+        - name: guest
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Фільтр по імені гостя (часткове співпадіння)
+        - name: changedBy
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 'Фільтр по користувачу, який змінював (часткове співпадіння)'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Stay'
+  '/stays/{id}':
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Queries
+      summary: Отримати проживання за ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID проживання
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Stay'
+        '404':
+          description: Stay not found
+  '/stays/{id}/history':
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Queries
+      summary: Історія змін статусів проживання
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID проживання
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stayId:
+                    type: integer
+                  mainGuestName:
+                    type: string
+                  logs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        oldStatus:
+                          type: string
+                        newStatus:
+                          type: string
+                        changedAt:
+                          type: string
+                          format: date-time
+                        changedBy:
+                          type: string
+                          nullable: true
+                        changedByRole:
+                          type: string
+                          nullable: true
+                        comment:
+                          type: string
+                          nullable: true
+        '404':
+          description: Stay not found
+  /audit/logs:
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Audit
+      summary: Отримати audit logs (об'єднані RoomStatusLog та StayStatusLog)
+      description: |
+        Повертає об'єднану історію змін з RoomStatusLog та StayStatusLog з можливістю фільтрації.
+        Логи автоматично фільтруються по готелю поточного користувача.
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - room
+              - stay
+          description: 'Фільтр по типу логів (room - тільки кімнати, stay - тільки проживання, якщо не вказано - обидва)'
+        - name: user
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Фільтр по імені користувача (changedBy) - часткове співпадіння
+        - name: role
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - guest
+              - admin
+              - editor
+              - system
+          description: Фільтр по ролі користувача (changedByRole) - точне співпадіння
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Дата початку діапазону (ISO 8601)
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Дата кінця діапазону (ISO 8601)
+      responses:
+        '200':
+          description: Масив audit logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    type:
+                      type: string
+                      enum:
+                        - room
+                        - stay
+                      description: Тип логу
+                    entityLabel:
+                      type: string
+                      description: 'Назва сутності (наприклад, "Room 102" або "John Doe")'
+                    entityLink:
+                      type: string
+                      nullable: true
+                      description: 'Посилання на сутність (наприклад, "/rooms/102/stays" або "/stays/77")'
+                    oldStatus:
+                      type: string
+                      description: Попередній статус
+                    newStatus:
+                      type: string
+                      description: Новий статус
+                    changedAt:
+                      type: string
+                      format: date-time
+                      description: Дата та час зміни
+                    changedBy:
+                      type: string
+                      nullable: true
+                      description: 'Ім''я користувача, який зробив зміну'
+                    changedByRole:
+                      type: string
+                      nullable: true
+                      enum:
+                        - guest
+                        - admin
+                        - editor
+                        - system
+                      description: Роль користувача
+                    comment:
+                      type: string
+                      nullable: true
+                      description: Коментар до зміни статусу (якщо вказано)
+              example:
+                - type: room
+                  entityLabel: Room 102
+                  entityLink: /rooms/102/stays
+                  oldStatus: booked
+                  newStatus: occupied
+                  changedAt: '2025-08-21T14:10:00Z'
+                  changedBy: frontdesk-1
+                  changedByRole: editor
+                - type: stay
+                  entityLabel: John Doe
+                  entityLink: /stays/77
+                  oldStatus: booked
+                  newStatus: cancelled
+                  changedAt: '2025-08-22T10:45:00Z'
+                  changedBy: guest
+                  changedByRole: guest
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden

@@ -6,8 +6,11 @@ import {
   getRooms,
   createRoom,
   updateRoom,
-  updateRoomStatus,
+  changeRoomStatusManual,
   deleteRoom,
+  getRoomHistory,
+  markRoomCleaned,
+  getRoomStats,
 } from "../controllers/roomController";
 
 import {
@@ -16,7 +19,6 @@ import {
   isEditorOrAdmin,
   isSuperadmin,
 } from "../middlewares/authMiddleware";
-import { getRoomStats } from "../controllers/stayController";
 import {
   getAvailabilityForAllRooms,
   getRoomAvailability,
@@ -54,7 +56,15 @@ router.put(
   "/number/:roomNumber/status",
   authenticateToken,
   isEditorOrAdmin,
-  updateRoomStatus
+  changeRoomStatusManual
+);
+
+// ✅ Завершити прибирання номера (cleaning → free)
+router.patch(
+  "/:id/cleaned",
+  authenticateToken,
+  isEditorOrAdmin,
+  markRoomCleaned
 );
 
 // ❌ Видалення кімнати
@@ -93,6 +103,19 @@ router.get(
   authenticateToken,
   isEditorOrAdmin,
   getRoomsByStatus
+);
+
+/**
+ * Get room status change history
+ * GET /rooms/number/:roomNumber/history
+ * ВАЖЛИВО: має бути перед /number/:roomNumber/stays в roomStay.ts
+ * інакше Express може неправильно обробити запит
+ */
+router.get(
+  "/number/:roomNumber/history",
+  authenticateToken,
+  isEditorOrAdmin,
+  getRoomHistory
 );
 
 export default router;

@@ -133,3 +133,89 @@ rooms_update_status:
     responses:
       "200":
         description: Updated
+
+rooms_cleaned:
+  patch:
+    security: [{ bearerAuth: [] }]
+    tags: [Rooms]
+    summary: Позначити кімнату як прибрану (cleaning → free)
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              notes:
+                type: string
+                nullable: true
+                description: Коментар/нотатка про прибирання
+    responses:
+      "200":
+        description: Room cleaned
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message: { type: string }
+                room: { $ref: "../openapi.base.yaml#/components/schemas/Room" }
+      "400":
+        description: Room is not in cleaning state
+      "404":
+        description: Room not found
+
+rooms_history:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Rooms]
+    summary: Історія змін статусів кімнати
+    parameters:
+      - name: roomNumber
+        in: path
+        required: true
+        schema: { type: string }
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                roomNumber: { type: string }
+                logs:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      oldStatus: { type: string }
+                      newStatus: { type: string }
+                      changedAt: { type: string, format: date-time }
+                      changedBy:
+                        type: string
+                        nullable: true
+                      changedByRole:
+                        type: string
+                        nullable: true
+                        enum: [system, admin, editor]
+                      stay:
+                        nullable: true
+                        type: object
+                        properties:
+                          id: { type: integer }
+                          mainGuestName: { type: string }
+                      entityLabel:
+                        type: string
+                        nullable: true
+                      entityLink:
+                        type: string
+                        nullable: true
+      "404":
+        description: Room not found

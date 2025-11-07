@@ -5,9 +5,18 @@ import { policyHoursFor } from "./policy";
 
 export function copyHotelDataFromAdmin(owner: Admin): {
   hotel_name?: string;
-  address?: string;
+  // Детальная структура адреса
+  street?: string | null;
+  buildingNumber?: string | null;
+  apartmentNumber?: string | null;
+  country?: string | null;
+  province?: string | null;
+  postalCode?: string | null;
+  latitude?: string | null;
+  longitude?: string | null;
   logo_url?: string;
-  phone?: string;
+  phoneCountryCode?: string | null;
+  phoneNumber?: string | null;
   email?: string;
   checkInHour: number;
   checkOutHour: number;
@@ -15,9 +24,18 @@ export function copyHotelDataFromAdmin(owner: Admin): {
   const { inHour, outHour } = policyHoursFor({ admin: owner } as any);
   return {
     hotel_name: owner.hotel_name ?? undefined,
-    address: owner.address ?? undefined,
+    // Копируем детальную структуру адреса
+    street: owner.street ?? null,
+    buildingNumber: owner.buildingNumber ?? null,
+    apartmentNumber: owner.apartmentNumber ?? null,
+    country: owner.country ?? null,
+    province: owner.province ?? null,
+    postalCode: owner.postalCode ?? null,
+    latitude: owner.latitude ?? null,
+    longitude: owner.longitude ?? null,
     logo_url: owner.logo_url ?? undefined,
-    phone: owner.phone ?? undefined,
+    phoneCountryCode: owner.phoneCountryCode ?? null,
+    phoneNumber: owner.phoneNumber ?? null,
     email: owner.email ?? undefined,
     // include policy hours so editor "inherits" visible hotel policy
     checkInHour: inHour,

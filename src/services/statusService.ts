@@ -29,7 +29,7 @@ import {
 } from "../utils/policy";
 
 type StayStatus = "booked" | "occupied" | "completed" | "cancelled";
-type RoomStatus = "free" | "booked" | "occupied";
+type RoomStatus = "free" | "booked" | "occupied" | "cleaning";
 
 export class StatusService {
   // Repositories via 'manager' inside a transaction ensure we operate within the tx.

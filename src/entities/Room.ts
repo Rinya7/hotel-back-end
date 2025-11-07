@@ -12,6 +12,8 @@ import {
 } from "typeorm";
 import { Stay } from "./Stay";
 import { Admin } from "./Admin";
+import { RoomStatusLog } from "./RoomStatusLog";
+import { RoomCleaningLog } from "./RoomCleaningLog";
 
 @Entity()
 @Unique(["admin", "roomNumber"]) // ✅ уникальность в рамках отеля
@@ -50,10 +52,16 @@ export class Room {
 
   @Column({
     type: "enum",
-    enum: ["free", "booked", "occupied"],
+    enum: ["free", "booked", "occupied", "cleaning"],
     default: "free",
   })
-  status!: "free" | "booked" | "occupied";
+  status!: "free" | "booked" | "occupied" | "cleaning";
+
+  @Column({ type: "timestamp", nullable: true })
+  lastCleanedAt?: Date | null;
+
+  @Column({ type: "varchar", length: 50, nullable: true })
+  lastCleanedBy?: string | null;
 
   /** Per-room policy hours (override admin). NULL → follow admin defaults */
   @Column({ type: "int", nullable: true })
@@ -64,6 +72,13 @@ export class Room {
 
   @OneToMany(() => Stay, (stay) => stay.room)
   stays!: Stay[];
+
+  // Зв'язок з логами змін статусів Room
+  @OneToMany(() => RoomStatusLog, (log) => log.room)
+  statusLogs!: RoomStatusLog[];
+
+  @OneToMany(() => RoomCleaningLog, (log) => log.room)
+  cleaningLogs!: RoomCleaningLog[];
 
   @CreateDateColumn() createdAt!: Date;
   @UpdateDateColumn() updatedAt!: Date;

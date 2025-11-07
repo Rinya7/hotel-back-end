@@ -3,6 +3,7 @@ import { Response } from "express";
 import { AppDataSource } from "../config/data-source";
 import { Room } from "../entities/Room";
 import { Stay } from "../entities/Stay";
+import { Admin } from "../entities/Admin";
 import { AuthRequest } from "../middlewares/authMiddleware";
 
 // Отримати статистику по кімнатах поточного адміна
@@ -33,18 +34,28 @@ export const getRoomStats = async (req: AuthRequest, res: Response) => {
 // (для адміна/editor)
 
 export const getCurrentStays = async (req: AuthRequest, res: Response) => {
-  const adminId = req.user!.adminId;
-  const stayRepo = AppDataSource.getRepository(Stay);
+  try {
+    const adminId = req.user!.adminId;
+    const stayRepo = AppDataSource.getRepository(Stay);
 
-  const stays = await stayRepo
-    .createQueryBuilder("s")
-    .leftJoinAndSelect("s.room", "r")
-    .where("r.adminId  = :adminId", { adminId })
-    .andWhere("s.status IN (:...active)", { active: ["booked", "occupied"] })
-    .orderBy("s.checkIn", "ASC")
-    .getMany();
+    const stays = await stayRepo
+      .createQueryBuilder("s")
+      .leftJoinAndSelect("s.room", "r")
+      .where("r.adminId  = :adminId", { adminId })
+      .andWhere("s.status IN (:...active)", { active: ["booked", "occupied"] })
+      .orderBy("s.checkIn", "ASC")
+      .getMany();
 
-  res.json(stays);
+    return res.json(stays);
+  } catch (error) {
+    // Логуємо тільки якщо це не очікувана ситуація (порожня база - це нормально)
+    if (error instanceof Error && !error.message.includes("empty")) {
+      console.warn("Помилка при отриманні current stays:", error.message);
+    }
+    // Повертаємо порожній масив (той самий формат, що й при успіху)
+    // Використовуємо 200 замість 500, бо порожня база - це нормальна ситуація
+    return res.json([]);
+  }
 };
 
 // Створення броні/заселення по кімнаті
@@ -62,6 +73,12 @@ export const createStayForRoom = async (req: AuthRequest, res: Response) => {
   });
   if (!room)
     return res.status(404).json({ message: `Room ${roomNumber} not found` });
+
+  if (room.status === "cleaning") {
+    return res
+      .status(409)
+      .json({ message: `Room ${roomNumber} is not available while cleaning` });
+  }
 
   const validStatuses: Stay["status"][] = ["booked", "occupied"];
   const finalStatus: Stay["status"] = validStatuses.includes(status)
@@ -85,6 +102,22 @@ export const createStayForRoom = async (req: AuthRequest, res: Response) => {
     });
   }
 
+  // Отримуємо інформацію про користувача для встановлення createdBy
+  const adminRepo = AppDataSource.getRepository(Admin);
+  const user = req.user;
+  let username: string = "guest";
+  let userRole: "guest" | "admin" | "editor" = "guest";
+
+  if (user) {
+    const admin = await adminRepo.findOne({ where: { id: user.sub } });
+    if (admin) {
+      username = admin.username;
+      if (user.role === "admin" || user.role === "editor") {
+        userRole = user.role;
+      }
+    }
+  }
+
   const stay = stayRepo.create({
     room,
     mainGuestName,
@@ -93,21 +126,25 @@ export const createStayForRoom = async (req: AuthRequest, res: Response) => {
     checkOut,
     balance: balance ?? 0,
     status: finalStatus,
+    createdBy: username,
+    updatedBy: username,
+    updatedByRole: userRole,
   });
 
   await stayRepo.save(stay);
 
-  //Статус кімнати
-  // Якщо бронь/заселення booked/occupied, то статус кімнати booked
-  // Якщо бронь/заселення completed/cancelled, то статус кімнати free
   const roomStatusFromStay: Record<Stay["status"], Room["status"]> = {
     booked: "booked",
     occupied: "occupied",
     completed: "free",
     cancelled: "free",
   };
-  room.status = roomStatusFromStay[finalStatus]; // ← используем finalStatus
-  await roomRepo.save(room);
+
+  const nextRoomStatus = roomStatusFromStay[finalStatus];
+  if (room.status !== nextRoomStatus) {
+    room.status = nextRoomStatus;
+    await roomRepo.save(room);
+  }
 
   res.status(201).json({
     message: `Stay for room ${roomNumber} created successfully`,

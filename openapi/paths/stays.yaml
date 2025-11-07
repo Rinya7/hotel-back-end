@@ -54,6 +54,46 @@ stays_get_and_post:
         description: Created
       "409":
         description: Conflicting dates
+  put:
+    security: [{ bearerAuth: [] }]
+    tags: [Stays]
+    summary: Оновити проживання за датами (checkIn/checkOut)
+    parameters:
+      - name: roomNumber
+        in: path
+        required: true
+        schema: { type: string }
+      - name: checkIn
+        in: query
+        required: true
+        schema: { type: string, format: date }
+      - name: checkOut
+        in: query
+        required: true
+        schema: { type: string, format: date }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            {
+              $ref: "../openapi.base.yaml#/components/schemas/UpdateStayByDatesRequest",
+            }
+    responses:
+      "200":
+        description: Updated
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message: { type: string }
+                stay:
+                  $ref: "../openapi.base.yaml#/components/schemas/Stay"
+      "404":
+        description: Stay not found
+      "409":
+        description: Conflicting dates
 
 stays_close:
   put:

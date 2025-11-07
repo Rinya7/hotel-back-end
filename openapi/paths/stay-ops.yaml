@@ -1,9 +1,9 @@
 # openapi/paths/stay-ops.yaml
 stay_check_in:
-  post:
+  patch:
     security: [{ bearerAuth: [] }]
     tags: [Stay Ops]
-    summary: Позначити як occupied (ручний check-in)
+    summary: Ручний check-in (booked → occupied або walk-in)
     parameters:
       - name: id
         in: path
@@ -16,16 +16,21 @@ stay_check_in:
           schema:
             type: object
             properties:
-              force: { type: boolean }
+              comment:
+                type: string
+                nullable: true
+                description: Коментар до логу (необов'язковий)
     responses:
       "200":
         description: OK
+      "400":
+        description: Room not available for check-in
 
 stay_check_out:
-  post:
+  patch:
     security: [{ bearerAuth: [] }]
     tags: [Stay Ops]
-    summary: Позначити як completed (ручний check-out)
+    summary: Ручний check-out (occupied → completed → cleaning)
     parameters:
       - name: id
         in: path
@@ -38,13 +43,18 @@ stay_check_out:
           schema:
             type: object
             properties:
-              force: { type: boolean }
+              comment:
+                type: string
+                nullable: true
+                description: Коментар до логу (необов'язковий)
     responses:
       "200":
         description: OK
+      "400":
+        description: Stay must be occupied before check-out
 
 stay_cancel:
-  post:
+  patch:
     security: [{ bearerAuth: [] }]
     tags: [Stay Ops]
     summary: Скасувати бронювання (booked → cancelled)
@@ -53,6 +63,47 @@ stay_cancel:
         in: path
         required: true
         schema: { type: integer }
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              comment:
+                type: string
+                nullable: true
+                description: Коментар причини скасування
+    responses:
+      "200":
+        description: OK
+      "400":
+        description: Only booked stay can be cancelled
+
+stay_update_status:
+  put:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Ops]
+    summary: Оновити статус проживання (з автоматичною синхронізацією кімнати)
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [status]
+            properties:
+              status:
+                $ref: "../openapi.base.yaml#/components/schemas/StayStatus"
+              comment:
+                type: string
+                nullable: true
+                description: "Обов'язковий при статусі cancelled для адміністраторів/редакторів"
     responses:
       "200":
         description: OK

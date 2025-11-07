@@ -9,6 +9,7 @@ import roomRoutes from "./routes/roomRoutes";
 import roomStay from "./routes/roomStay";
 import staysRoutes from "./routes/stayRoutes";
 import roomPolicyRoutes from "./routes/roomPolicy.routes";
+import auditRoutes from "./routes/audit.routes";
 
 import { setupSwagger } from "./config/swagger";
 import { setupOpenApiValidator } from "./config/openapi-validator";
@@ -61,6 +62,7 @@ app.use("/auth", authRoutes);
 app.use("/rooms", roomRoutes);
 app.use("/rooms", roomStay);
 app.use("/stays", staysRoutes);
+app.use("/audit", auditRoutes);
 app.use(roomPolicyRoutes);
 
 export default app;
