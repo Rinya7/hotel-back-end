@@ -46,6 +46,24 @@ audit_logs:
           type: string
           format: date-time
         description: Дата кінця діапазону (ISO 8601)
+      - name: roomNumber
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Фільтр по номеру кімнати (тільки для room logs, частковий пошук)
+      - name: stayId
+        in: query
+        required: false
+        schema:
+          type: integer
+        description: Фільтр по ідентифікатору проживання (тільки для stay logs)
+      - name: bookingCode
+        in: query
+        required: false
+        schema:
+          type: string
+        description: Фільтр по номеру бронювання (формат "roomNumber-stayId")
     responses:
       "200":
         description: Масив audit logs
@@ -62,7 +80,7 @@ audit_logs:
                     description: Тип логу
                   entityLabel:
                     type: string
-                    description: Назва сутності (наприклад, "Room 102" або "John Doe")
+                    description: Значення пов'язаної сутності (номер кімнати або ID проживання)
                   entityLink:
                     type: string
                     nullable: true
@@ -90,23 +108,55 @@ audit_logs:
                     type: string
                     nullable: true
                     description: Коментар до зміни статусу (якщо вказано)
+                  roomNumber:
+                    type: string
+                    nullable: true
+                    description: Номер кімнати, до якої належить запис (якщо застосовно)
+                  stayId:
+                    type: integer
+                    nullable: true
+                    description: Ідентифікатор проживання (якщо застосовно)
+                  bookingCode:
+                    type: string
+                    nullable: true
+                    description: Складений номер бронювання (номер кімнати + ID проживання)
+                  stayCheckIn:
+                    type: string
+                    format: date
+                    nullable: true
+                    description: Дата початку проживання (якщо лог пов'язаний із stay)
+                  stayCheckOut:
+                    type: string
+                    format: date
+                    nullable: true
+                    description: Дата завершення проживання (якщо лог пов'язаний із stay)
             example:
               - type: room
-                entityLabel: "Room 102"
+                entityLabel: "102"
                 entityLink: "/rooms/102/stays"
-                oldStatus: "booked"
+                oldStatus: "free"
                 newStatus: "occupied"
                 changedAt: "2025-08-21T14:10:00Z"
                 changedBy: "frontdesk-1"
                 changedByRole: "editor"
+                roomNumber: "102"
+                stayId: 77
+                bookingCode: "102-77"
+                stayCheckIn: "2025-08-21"
+                stayCheckOut: "2025-08-24"
               - type: stay
-                entityLabel: "John Doe"
-                entityLink: "/stays/77"
+                entityLabel: "77"
+                entityLink: "/rooms/102/stays"
                 oldStatus: "booked"
                 newStatus: "cancelled"
                 changedAt: "2025-08-22T10:45:00Z"
                 changedBy: "guest"
                 changedByRole: "guest"
+                roomNumber: "102"
+                stayId: 77
+                bookingCode: "102-77"
+                stayCheckIn: "2025-08-21"
+                stayCheckOut: "2025-08-24"
       "401":
         description: Unauthorized
       "403":

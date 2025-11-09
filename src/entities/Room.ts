@@ -52,10 +52,10 @@ export class Room {
 
   @Column({
     type: "enum",
-    enum: ["free", "booked", "occupied", "cleaning"],
+    enum: ["free", "occupied", "cleaning"],
     default: "free",
   })
-  status!: "free" | "booked" | "occupied" | "cleaning";
+  status!: "free" | "occupied" | "cleaning";
 
   @Column({ type: "timestamp", nullable: true })
   lastCleanedAt?: Date | null;

@@ -10,21 +10,28 @@ stay_check_in:
         required: true
         schema: { type: integer }
     requestBody:
-      required: false
+      required: true
       content:
         application/json:
           schema:
             type: object
+            required: [guests]
             properties:
               comment:
                 type: string
                 nullable: true
                 description: Коментар до логу (необов'язковий)
+              guests:
+                type: array
+                minItems: 1
+                description: Перелік гостей, яких реєструємо під час заселення
+                items:
+                  $ref: "../openapi.base.yaml#/components/schemas/StayGuestPayload"
     responses:
       "200":
         description: OK
       "400":
-        description: Room not available for check-in
+        description: Room not available for check-in або відсутній список гостей
 
 stay_check_out:
   patch:

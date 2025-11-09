@@ -9,7 +9,7 @@ import {
 import { Room } from "./Room";
 import { Stay } from "./Stay";
 
-type RoomStatus = "free" | "booked" | "occupied" | "cleaning";
+type RoomStatus = "free" | "occupied" | "cleaning";
 
 @Entity("room_status_log")
 export class RoomStatusLog {

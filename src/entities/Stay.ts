@@ -11,6 +11,7 @@ import {
 import { Room } from "./Room";
 import { StayStatusLog } from "./StayStatusLog";
 import { RoomStatusLog } from "./RoomStatusLog";
+import { StayGuest } from "./StayGuest";
 
 @Entity()
 export class Stay {
@@ -23,7 +24,7 @@ export class Stay {
   @Column()
   mainGuestName!: string;
 
-  @Column("text", { array: true, nullable: true })
+  @Column("text", { array: true, nullable: true, default: () => "'{}'" })
   extraGuestNames!: string[];
 
   @Column({ type: "date" })
@@ -56,6 +57,9 @@ export class Stay {
   // Зв'язок з логами змін статусів Stay
   @OneToMany(() => StayStatusLog, (log) => log.stay)
   statusLogs!: StayStatusLog[];
+
+  @OneToMany(() => StayGuest, (guest) => guest.stay, { cascade: true })
+  guests!: StayGuest[];
 
   // Зв'язок з логами змін статусів Room (якщо зміна була через Stay)
   @OneToMany(() => RoomStatusLog, (log) => log.stay)

@@ -54,7 +54,7 @@ rooms_by_status:
   get:
     security: [{ bearerAuth: [] }]
     tags: [Rooms]
-    summary: Кімнати за статусом (free|booked|occupied)
+    summary: Кімнати за статусом (free|occupied|cleaning)
     parameters:
       - name: status
         in: path

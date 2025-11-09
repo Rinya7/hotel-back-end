@@ -253,7 +253,7 @@ components:
     # ==== ROOMS ====
     RoomStatus:
       type: string
-      enum: [free, booked, occupied, cleaning]
+      enum: [free, occupied, cleaning]
 
     Room:
       type: object
@@ -315,7 +315,6 @@ components:
       type: object
       properties:
         free: { type: integer }
-        booked: { type: integer }
         occupied: { type: integer }
         cleaning: { type: integer }
 
@@ -346,7 +345,7 @@ components:
           type: integer
         currentStatus:
           type: string
-          enum: [free, booked, occupied]
+          enum: [free, occupied, cleaning]
         available:
           type: boolean
         conflictsCount:
@@ -376,6 +375,10 @@ components:
           type: array
           items: { type: string }
           nullable: true
+        guests:
+          type: array
+          items: { $ref: "#/components/schemas/StayGuest" }
+          nullable: true
         checkIn: { type: string, format: date }
         checkOut: { type: string, format: date }
         balance:
@@ -391,6 +394,26 @@ components:
           type: string
           nullable: true
           enum: [guest, admin, editor]
+
+    StayGuest:
+      type: object
+      properties:
+        id: { type: integer }
+        fullName: { type: string }
+        documentType: { type: string, nullable: true }
+        documentNumber: { type: string, nullable: true }
+        birthDate: { type: string, format: date, nullable: true }
+        notes: { type: string, nullable: true }
+
+    StayGuestPayload:
+      type: object
+      required: [fullName]
+      properties:
+        fullName: { type: string }
+        documentType: { type: string, nullable: true }
+        documentNumber: { type: string, nullable: true }
+        birthDate: { type: string, format: date, nullable: true }
+        notes: { type: string, nullable: true }
 
     CreateStayForRoomRequest:
       type: object

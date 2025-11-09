@@ -3,6 +3,7 @@ import { Response } from "express";
 import { AppDataSource } from "../config/data-source";
 import { Room } from "../entities/Room";
 import { Stay } from "../entities/Stay";
+import { StayStatusLog } from "../entities/StayStatusLog";
 import { Admin } from "../entities/Admin";
 import { AuthRequest } from "../middlewares/authMiddleware";
 
@@ -38,9 +39,10 @@ export const getCurrentStays = async (req: AuthRequest, res: Response) => {
     const adminId = req.user!.adminId;
     const stayRepo = AppDataSource.getRepository(Stay);
 
-    const stays = await stayRepo
+  const stays = await stayRepo
       .createQueryBuilder("s")
       .leftJoinAndSelect("s.room", "r")
+    .leftJoinAndSelect("s.guests", "g")
       .where("r.adminId  = :adminId", { adminId })
       .andWhere("s.status IN (:...active)", { active: ["booked", "occupied"] })
       .orderBy("s.checkIn", "ASC")
@@ -67,6 +69,7 @@ export const createStayForRoom = async (req: AuthRequest, res: Response) => {
 
   const roomRepo = AppDataSource.getRepository(Room);
   const stayRepo = AppDataSource.getRepository(Stay);
+  const stayLogRepo = AppDataSource.getRepository(StayStatusLog);
 
   const room = await roomRepo.findOne({
     where: { roomNumber, admin: { id: req.user!.adminId } },
@@ -118,10 +121,15 @@ export const createStayForRoom = async (req: AuthRequest, res: Response) => {
     }
   }
 
+  const normalizedExtraGuests =
+    Array.isArray(extraGuestNames) && extraGuestNames.length > 0
+      ? extraGuestNames
+      : [];
+
   const stay = stayRepo.create({
     room,
     mainGuestName,
-    extraGuestNames,
+    extraGuestNames: normalizedExtraGuests,
     checkIn,
     checkOut,
     balance: balance ?? 0,
@@ -133,15 +141,24 @@ export const createStayForRoom = async (req: AuthRequest, res: Response) => {
 
   await stayRepo.save(stay);
 
-  const roomStatusFromStay: Record<Stay["status"], Room["status"]> = {
-    booked: "booked",
+  const creationLog = stayLogRepo.create({
+    stay,
+    oldStatus: finalStatus,
+    newStatus: finalStatus,
+    changedBy: username,
+    changedByRole: userRole,
+    comment: "created",
+  });
+  await stayLogRepo.save(creationLog);
+
+  const roomStatusFromStay: Partial<Record<Stay["status"], Room["status"]>> = {
     occupied: "occupied",
-    completed: "free",
+    completed: "cleaning",
     cancelled: "free",
   };
 
   const nextRoomStatus = roomStatusFromStay[finalStatus];
-  if (room.status !== nextRoomStatus) {
+  if (nextRoomStatus && room.status !== nextRoomStatus) {
     room.status = nextRoomStatus;
     await roomRepo.save(room);
   }
@@ -171,6 +188,7 @@ export const updateStayByDates = async (req: AuthRequest, res: Response) => {
   const stay = await stayRepo
     .createQueryBuilder("s")
     .leftJoinAndSelect("s.room", "r")
+    .leftJoinAndSelect("s.guests", "g")
     .where("r.adminId = :adminId", { adminId: req.user!.adminId })
     .andWhere("r.roomNumber = :roomNumber", { roomNumber })
     .andWhere("s.checkIn = :checkIn AND s.checkOut = :checkOut", {
@@ -185,7 +203,11 @@ export const updateStayByDates = async (req: AuthRequest, res: Response) => {
     req.body;
 
   if (mainGuestName !== undefined) stay.mainGuestName = mainGuestName;
-  if (extraGuestNames !== undefined) stay.extraGuestNames = extraGuestNames;
+  if (Array.isArray(extraGuestNames)) {
+    stay.extraGuestNames = extraGuestNames;
+  } else if (extraGuestNames === null) {
+    stay.extraGuestNames = [];
+  }
   if (balance !== undefined) stay.balance = balance;
 
   if (newCheckIn || newCheckOut) {
@@ -291,6 +313,6 @@ export const getStaysForRoom = async (req: AuthRequest, res: Response) => {
     qb.andWhere("s.checkIn >= :from AND s.checkOut <= :to", { from, to });
   }
 
-  const stays = await qb.getMany();
+  const stays = await qb.leftJoinAndSelect("s.guests", "g").getMany();
   res.json(stays);
 };

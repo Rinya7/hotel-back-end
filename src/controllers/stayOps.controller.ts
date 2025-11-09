@@ -10,9 +10,10 @@ import { StayStatusLog } from "../entities/StayStatusLog";
 import { RoomStatusLog } from "../entities/RoomStatusLog";
 import { Admin } from "../entities/Admin";
 import { getOwnerAdminId } from "../utils/owner";
+import { StayGuest } from "../entities/StayGuest";
 
 type StayStatus = "booked" | "occupied" | "completed" | "cancelled";
-type RoomStatus = "free" | "booked" | "occupied" | "cleaning";
+type RoomStatus = "free" | "occupied" | "cleaning";
 type StayActorRole = "guest" | "admin" | "editor";
 type RoomActorRole = "system" | "admin" | "editor";
 
@@ -28,7 +29,7 @@ interface StatusChangeResult {
 }
 
 const STAY_TO_ROOM_STATUS: Record<StayStatus, RoomStatus> = {
-  booked: "booked",
+  booked: "free",
   occupied: "occupied",
   completed: "cleaning",
   cancelled: "free",
@@ -66,7 +67,7 @@ async function loadStayWithRoom(
 ): Promise<Stay | null> {
   return AppDataSource.getRepository(Stay).findOne({
     where: { id: stayId, room: { admin: { id: ownerAdminId } } },
-    relations: ["room", "room.admin"],
+    relations: ["room", "room.admin", "guests"],
   });
 }
 
@@ -100,7 +101,7 @@ async function persistStayStatusChange(
   if (previousStayStatus === nextStatus && roomDirective === "skip") {
     const refreshed = await stayRepo.findOne({
       where: { id: stay.id },
-      relations: ["room", "statusLogs"],
+      relations: ["room", "statusLogs", "guests"],
     });
     if (!refreshed) {
       throw new Error("Stay disappeared during status change");
@@ -147,7 +148,7 @@ async function persistStayStatusChange(
 
   const refreshedStay = await stayRepo.findOne({
     where: { id: stay.id },
-    relations: ["room", "statusLogs"],
+    relations: ["room", "statusLogs", "guests"],
   });
 
   if (!refreshedStay) {
@@ -184,8 +185,6 @@ export async function updateRoomStatus(
   let nextStatus: RoomStatus = room.status;
   if (activeStays.some((s) => s.status === "occupied")) {
     nextStatus = "occupied";
-  } else if (activeStays.some((s) => s.status === "booked")) {
-    nextStatus = "booked";
   } else {
     nextStatus = "free";
   }
@@ -250,10 +249,77 @@ export const checkInStay = async (req: AuthRequest, res: Response) => {
       .json({ message: "Room not available for check-in" });
   }
 
+  const guestRepo = AppDataSource.getRepository(StayGuest);
+  const stayRepo = AppDataSource.getRepository(Stay);
+
+  const payload = (req.body ?? {}) as {
+    comment?: string;
+    guests?: Array<{
+      fullName?: string;
+      documentType?: string | null;
+      documentNumber?: string | null;
+      birthDate?: string | null;
+      notes?: string | null;
+    }>;
+  };
+
+  const trimmedComment = payload.comment?.toString().trim();
+  const guestsPayload = Array.isArray(payload.guests)
+    ? payload.guests
+    : [];
+
+  const normalizedGuests = guestsPayload
+    .map((guest) => ({
+      fullName: guest.fullName?.toString().trim() ?? "",
+      documentType: guest.documentType?.toString().trim() || null,
+      documentNumber: guest.documentNumber?.toString().trim() || null,
+      birthDate:
+        guest.birthDate && !Number.isNaN(Date.parse(guest.birthDate))
+          ? new Date(guest.birthDate)
+          : null,
+      notes: guest.notes?.toString().trim() || null,
+    }))
+    .filter((guest) => guest.fullName.length > 0);
+
+  if (normalizedGuests.length === 0) {
+    return res.status(400).json({
+      message: "Guest list is required for check-in",
+    });
+  }
+
+  const capacity = typeof stay.room.capacity === "number" ? stay.room.capacity : null;
+  if (capacity !== null && capacity > 0 && normalizedGuests.length > capacity) {
+    return res.status(400).json({
+      message: `Guest count exceeds room capacity (${capacity})`,
+    });
+  }
+
+  await guestRepo.delete({ stay: { id: stay.id } });
+
+  stay.mainGuestName = normalizedGuests[0].fullName;
+  stay.extraGuestNames = normalizedGuests
+    .slice(1)
+    .map((guest) => guest.fullName);
+  stay.guests = [];
+  await stayRepo.save(stay);
+
+  const guestEntities = normalizedGuests.map((guest) =>
+    guestRepo.create({
+      stay,
+      fullName: guest.fullName,
+      documentType: guest.documentType,
+      documentNumber: guest.documentNumber,
+      birthDate: guest.birthDate,
+      notes: guest.notes,
+    })
+  );
+  await guestRepo.save(guestEntities);
+  stay.guests = guestEntities;
+
   const result = await persistStayStatusChange(stay, {
     nextStatus: "occupied",
     actor,
-    comment,
+    comment: trimmedComment ?? null,
     roomDirective: "auto",
   });
 

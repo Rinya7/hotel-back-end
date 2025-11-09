@@ -173,6 +173,7 @@ export const searchStays = async (req: AuthRequest, res: Response) => {
     }
 
     const stays = await query
+      .leftJoinAndSelect("stay.guests", "guests")
       .orderBy("stay.checkIn", "DESC")
       .getMany();
 
@@ -196,7 +197,7 @@ export const getStayById = async (req: AuthRequest, res: Response) => {
     const stayRepo = AppDataSource.getRepository(Stay);
     const stay = await stayRepo.findOne({
       where: { id: stayId, room: { admin: { id: ownerAdminId } } },
-      relations: ["room"],
+      relations: ["room", "guests"],
     });
 
     if (!stay) {

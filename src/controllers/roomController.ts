@@ -11,7 +11,7 @@ import { getOwnerAdminId } from "../utils/owner";
 import { ROLES } from "../auth/roles";
 import { updateRoomStatus } from "./stayOps.controller";
 
-type RoomStatus = "free" | "booked" | "occupied" | "cleaning";
+type RoomStatus = "free" | "occupied" | "cleaning";
 
 /** Narrow request body types (strict, no any) */
 interface CreateRoomBody {
@@ -205,12 +205,9 @@ export const createRoom = async (req: AuthRequest, res: Response) => {
 /** GET /rooms/status/:status — list rooms by current Room.status */
 export const getRoomsByStatus = async (req: AuthRequest, res: Response) => {
   const ownerAdminId = getOwnerAdminId(req);
-  const statusParam = String(req.params.status) as
-    | "free"
-    | "booked"
-    | "occupied";
+  const statusParam = String(req.params.status) as RoomStatus;
 
-  if (!["free", "booked", "occupied"].includes(statusParam)) {
+  if (!["free", "occupied", "cleaning"].includes(statusParam)) {
     return res.status(400).json({ message: "Invalid status value" });
   }
 
@@ -350,13 +347,9 @@ export const changeRoomStatusManual = async (
 ) => {
   const ownerAdminId = getOwnerAdminId(req);
   const roomNumber = req.params.roomNumber;
-  const { status } = req.body as { status: "free" | "booked" | "occupied" };
+  const { status } = req.body as { status: RoomStatus };
 
-  const validStatuses: Array<"free" | "booked" | "occupied"> = [
-    "free",
-    "booked",
-    "occupied",
-  ];
+  const validStatuses: RoomStatus[] = ["free", "occupied", "cleaning"];
   if (!validStatuses.includes(status)) {
     return res.status(400).json({ message: "Invalid status value" });
   }
@@ -543,7 +536,6 @@ export const getRoomStats = async (req: AuthRequest, res: Response) => {
 
   const stats: Record<RoomStatus, number> = {
     free: 0,
-    booked: 0,
     occupied: 0,
     cleaning: 0,
   };

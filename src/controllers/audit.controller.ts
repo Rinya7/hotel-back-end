@@ -20,10 +20,20 @@ import { getOwnerAdminId } from "../utils/owner";
 export const getAuditLogs = async (req: AuthRequest, res: Response) => {
   try {
     const ownerAdminId = getOwnerAdminId(req);
-    const { type, user, role, from, to } = req.query as Record<string, string | undefined>;
+    const { type, user, role, from, to, roomNumber, stayId, bookingCode } = req.query as Record<string, string | undefined>;
 
     const roomRepo = AppDataSource.getRepository(RoomStatusLog);
     const stayRepo = AppDataSource.getRepository(StayStatusLog);
+
+    const normalizedRoomNumber = roomNumber?.trim() ?? "";
+    const normalizedBookingCode = bookingCode?.trim() ?? "";
+    const stayIdNumber = stayId ? Number.parseInt(stayId, 10) : undefined;
+    const hasRoomNumberFilter = normalizedRoomNumber.length > 0;
+    const hasStayIdFilter = Number.isInteger(stayIdNumber);
+    const hasBookingCodeFilter = normalizedBookingCode.length > 0;
+
+    const includeRoomLogs = !type || type === "room";
+    const includeStayLogs = !type || type === "stay";
 
     // Побудова фільтрації для RoomStatusLog через QueryBuilder
     const roomQuery = roomRepo
@@ -48,6 +58,12 @@ export const getAuditLogs = async (req: AuthRequest, res: Response) => {
       roomQuery.andWhere("log.changedAt >= :from", { from: new Date(from) });
     } else if (to) {
       roomQuery.andWhere("log.changedAt <= :to", { to: new Date(to) });
+    }
+
+    if (hasRoomNumberFilter) {
+      roomQuery.andWhere("room.roomNumber ILIKE :roomNumber", {
+        roomNumber: `%${normalizedRoomNumber}%`,
+      });
     }
 
     // Побудова фільтрації для StayStatusLog через QueryBuilder
@@ -75,7 +91,17 @@ export const getAuditLogs = async (req: AuthRequest, res: Response) => {
       stayQuery.andWhere("log.changedAt <= :to", { to: new Date(to) });
     }
 
-    const allLogs: Array<{
+    if (hasStayIdFilter && stayIdNumber !== undefined) {
+      stayQuery.andWhere("stay.id = :stayId", { stayId: stayIdNumber });
+    }
+
+    if (hasRoomNumberFilter) {
+      stayQuery.andWhere("room.roomNumber ILIKE :roomNumber", {
+        roomNumber: `%${normalizedRoomNumber}%`,
+      });
+    }
+
+    let allLogs: Array<{
       type: "room" | "stay";
       entityLabel: string;
       entityLink: string | null;
@@ -85,10 +111,15 @@ export const getAuditLogs = async (req: AuthRequest, res: Response) => {
       changedBy: string | null;
       changedByRole: string | null;
       comment: string | null;
+      stayCheckIn: string | null;
+      stayCheckOut: string | null;
+      roomNumber: string | null;
+      stayId: number | null;
+      bookingCode: string | null;
     }> = [];
 
     // Якщо не вказано тип або type=room — беремо логи кімнат
-    if (!type || type === "room") {
+    if (includeRoomLogs) {
       try {
         const roomLogs = await roomQuery
           .orderBy("log.changedAt", "DESC")
@@ -97,7 +128,10 @@ export const getAuditLogs = async (req: AuthRequest, res: Response) => {
         allLogs.push(
           ...roomLogs.map((log) => ({
             type: "room" as const,
-            entityLabel: log.room ? `Room ${log.room.roomNumber}` : "Unknown Room",
+            entityLabel:
+              log.room && log.stay
+                ? `${log.room.roomNumber}-${log.stay.id}`
+                : log.room?.roomNumber ?? "—",
             entityLink: log.room ? `/rooms/${log.room.roomNumber}/stays` : null,
             oldStatus: log.oldStatus,
             newStatus: log.newStatus,
@@ -105,6 +139,12 @@ export const getAuditLogs = async (req: AuthRequest, res: Response) => {
             changedBy: log.changedBy || null,
             changedByRole: log.changedByRole || null,
             comment: log.comment || null,
+            stayCheckIn: log.stay ? log.stay.checkIn : null,
+            stayCheckOut: log.stay ? log.stay.checkOut : null,
+            roomNumber: log.room ? log.room.roomNumber : null,
+            stayId: log.stay ? log.stay.id : null,
+            bookingCode:
+              log.room && log.stay ? `${log.room.roomNumber}-${log.stay.id}` : null,
           }))
         );
       } catch (roomError) {
@@ -114,7 +154,7 @@ export const getAuditLogs = async (req: AuthRequest, res: Response) => {
     }
 
     // Якщо не вказано тип або type=stay — беремо логи проживань
-    if (!type || type === "stay") {
+    if (includeStayLogs) {
       try {
         const stayLogs = await stayQuery
           .orderBy("log.changedAt", "DESC")
@@ -123,14 +163,30 @@ export const getAuditLogs = async (req: AuthRequest, res: Response) => {
         allLogs.push(
           ...stayLogs.map((log) => ({
             type: "stay" as const,
-            entityLabel: log.stay?.mainGuestName || "Unknown Guest",
-            entityLink: log.stay ? `/stays/${log.stay.id}` : null,
+            entityLabel:
+              log.stay?.room?.roomNumber && log.stay
+                ? `${log.stay.room.roomNumber}-${log.stay.id}`
+                : log.stay
+                ? String(log.stay.id)
+                : "—",
+            entityLink:
+              log.stay?.room?.roomNumber
+                ? `/rooms/${log.stay.room.roomNumber}/stays`
+                : null,
             oldStatus: log.oldStatus,
             newStatus: log.newStatus,
             changedAt: log.changedAt,
             changedBy: log.changedBy || null,
             changedByRole: log.changedByRole || null,
             comment: log.comment || null,
+            stayCheckIn: log.stay ? log.stay.checkIn : null,
+            stayCheckOut: log.stay ? log.stay.checkOut : null,
+            roomNumber: log.stay?.room ? log.stay.room.roomNumber : null,
+            stayId: log.stay ? log.stay.id : null,
+            bookingCode:
+              log.stay?.room?.roomNumber && log.stay
+                ? `${log.stay.room.roomNumber}-${log.stay.id}`
+                : null,
           }))
         );
       } catch (stayError) {
@@ -139,13 +195,64 @@ export const getAuditLogs = async (req: AuthRequest, res: Response) => {
       }
     }
 
-    // Сортуємо всі логи за датою (новіші спочатку)
+    if (hasRoomNumberFilter) {
+      const search = normalizedRoomNumber.toLowerCase();
+      allLogs = allLogs.filter((log) => {
+        const roomMatches = log.roomNumber?.toLowerCase().includes(search);
+        const bookingMatches = log.bookingCode
+          ? log.bookingCode.toLowerCase().includes(search)
+          : false;
+        return roomMatches || bookingMatches;
+      });
+    }
+
+    if (hasStayIdFilter && stayIdNumber !== undefined) {
+      const search = stayIdNumber;
+      allLogs = allLogs.filter((log) => {
+        if (log.stayId === search) {
+          return true;
+        }
+        if (log.bookingCode) {
+          const bookingStayPart = Number.parseInt(
+            log.bookingCode.split("-").pop() ?? "",
+            10
+          );
+          return bookingStayPart === search;
+        }
+        return false;
+      });
+    }
+
+    if (hasBookingCodeFilter) {
+      const search = normalizedBookingCode.toLowerCase();
+      allLogs = allLogs.filter((log) =>
+        log.bookingCode?.toLowerCase().includes(search)
+      );
+    }
+
     allLogs.sort(
       (a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime()
     );
 
     // Завжди повертаємо масив (навіть якщо порожній)
-    return res.json(allLogs);
+    return res.json(
+      allLogs.map((log) => ({
+        type: log.type,
+        entityLabel: log.entityLabel,
+        entityLink: log.entityLink,
+        oldStatus: log.oldStatus,
+        newStatus: log.newStatus,
+        changedAt: log.changedAt,
+        changedBy: log.changedBy,
+        changedByRole: log.changedByRole,
+        comment: log.comment,
+        stayCheckIn: log.stayCheckIn,
+        stayCheckOut: log.stayCheckOut,
+        roomNumber: log.roomNumber,
+        stayId: log.stayId,
+        bookingCode: log.bookingCode,
+      }))
+    );
   } catch (error) {
     console.error("Помилка при отриманні audit logs:", error);
     // У випадку помилки повертаємо порожній масив замість помилки

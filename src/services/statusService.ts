@@ -29,7 +29,7 @@ import {
 } from "../utils/policy";
 
 type StayStatus = "booked" | "occupied" | "completed" | "cancelled";
-type RoomStatus = "free" | "booked" | "occupied" | "cleaning";
+type RoomStatus = "free" | "occupied" | "cleaning";
 
 export class StatusService {
   // Repositories via 'manager' inside a transaction ensure we operate within the tx.
@@ -113,7 +113,7 @@ export class StatusService {
             relations: ["room", "room.admin"],
           });
 
-          let newRoomStatus: RoomStatus = "free";
+          let newRoomStatus: RoomStatus = "cleaning";
 
           if (covering) {
             // Refine by exact policy hours for the covering stay
@@ -132,19 +132,6 @@ export class StatusService {
             }
           }
 
-          if (newRoomStatus !== "occupied") {
-            // No covering stay right now → look for the next future booking
-            const next = await manager.getRepository(Stay).findOne({
-              where: {
-                room: { id: room.id },
-                status: "booked",
-                checkIn: MoreThan(todayStart.toJSDate()),
-              },
-              order: { checkIn: "ASC" },
-            });
-            newRoomStatus = next ? "booked" : "free";
-          }
-
           if (room.status !== newRoomStatus) {
             room.status = newRoomStatus;
             await manager.getRepository(Room).save(room);
@@ -159,8 +146,8 @@ export class StatusService {
 
   /**
    * Recompute Room.status for all rooms using policy-hour windows:
+   *   - Skip rooms that are currently in "cleaning"
    *   - "occupied" if a booked/occupied stay actually covers "now" by policy hours
-   *   - else "booked" if there exists a future booked stay
    *   - else "free"
    */
   private async reconcileRooms(manager: EntityManager): Promise<void> {
@@ -172,6 +159,9 @@ export class StatusService {
     });
 
     for (const room of rooms) {
+      if (room.status === "cleaning") {
+        continue;
+      }
       const { inHour, outHour } = policyHoursFor(room);
 
       const candidates = await manager.getRepository(Stay).find({
@@ -206,14 +196,8 @@ export class StatusService {
         }
       }
 
-      const futureBooked = candidates.some(
-        (s) => s.status === "booked" && s.checkIn > todayStart.toJSDate()
-      );
-
       const newStatus: RoomStatus = covered
         ? "occupied"
-        : futureBooked
-        ? "booked"
         : "free";
 
       if (room.status !== newStatus) {
