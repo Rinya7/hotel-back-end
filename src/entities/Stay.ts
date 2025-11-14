@@ -12,6 +12,7 @@ import { Room } from "./Room";
 import { StayStatusLog } from "./StayStatusLog";
 import { RoomStatusLog } from "./RoomStatusLog";
 import { StayGuest } from "./StayGuest";
+import { GuestAccessToken } from "./GuestAccessToken";
 
 @Entity()
 export class Stay {
@@ -64,6 +65,12 @@ export class Stay {
   // Зв'язок з логами змін статусів Room (якщо зміна була через Stay)
   @OneToMany(() => RoomStatusLog, (log) => log.stay)
   roomStatusLogs!: RoomStatusLog[];
+
+  // Токени доступу гостя до цього проживання
+  @OneToMany(() => GuestAccessToken, (token) => token.stay, {
+    cascade: true,
+  })
+  guestTokens!: GuestAccessToken[];
 
   @CreateDateColumn()
   createdAt!: Date;
