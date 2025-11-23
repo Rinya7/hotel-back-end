@@ -334,7 +334,7 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
     return res.json(data);
   }
 
-  // admin → як і було: тільки свої редактори плоским списком (або хочеш — можу зробити з блоком self + editors)
+  // admin → тільки свої редактори плоским списком
   if (role === ROLES.ADMIN) {
     const editors = await adminRepo.find({
       where: { createdBy: { id: adminId }, role: ROLES.EDITOR },
@@ -352,6 +352,8 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
         e.phoneCountryCode && e.phoneNumber
           ? `${e.phoneCountryCode} ${e.phoneNumber}`
           : e.phoneCountryCode || null,
+      phoneCountryCode: e.phoneCountryCode,
+      phoneNumber: e.phoneNumber,
       email: e.email,
       isBlocked: e.isBlocked,
       createdAt: e.createdAt,
@@ -359,6 +361,214 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
     }));
 
     return res.json(data);
+  }
+};
+
+/**
+ * 🔐 GET /auth/profile
+ * Получить информацию о текущем админе (для админа) или отелях (для суперадмина)
+ */
+export const getProfile = async (req: AuthRequest, res: Response) => {
+  const adminRepo = AppDataSource.getRepository(Admin);
+  const { adminId, role, sub } = req.user!;
+
+  try {
+    if (role === ROLES.ADMIN) {
+      // Для админа возвращаем информацию о нем самом
+      const admin = await adminRepo.findOne({
+        where: { id: sub },
+        relations: ["createdEditorAdmins"],
+      });
+
+      if (!admin) {
+        return res.status(404).json({ message: "Admin not found" });
+      }
+
+      // Формируем полный ответ с информацией об админе и редакторах
+      const data = {
+        id: admin.id,
+        username: admin.username,
+        role: admin.role,
+        hotel_name: admin.hotel_name,
+        // Детальная структура адреса
+        street: admin.street,
+        buildingNumber: admin.buildingNumber,
+        apartmentNumber: admin.apartmentNumber,
+        country: admin.country,
+        province: admin.province,
+        postalCode: admin.postalCode,
+        latitude: admin.latitude,
+        longitude: admin.longitude,
+        full_name: admin.full_name,
+        // Телефон разделен на код и номер
+        phoneCountryCode: admin.phoneCountryCode,
+        phoneNumber: admin.phoneNumber,
+        logo_url: admin.logo_url,
+        // Для обратной совместимости формируем phone из компонентов
+        phone:
+          admin.phoneCountryCode && admin.phoneNumber
+            ? `${admin.phoneCountryCode} ${admin.phoneNumber}`
+            : admin.phoneCountryCode || null,
+        email: admin.email,
+        isBlocked: admin.isBlocked,
+        checkInHour: admin.checkInHour,
+        checkOutHour: admin.checkOutHour,
+        createdAt: admin.createdAt,
+        updatedAt: admin.updatedAt,
+        editorsCount: admin.createdEditorAdmins?.length ?? 0,
+        editors: (admin.createdEditorAdmins || []).map((e) => ({
+          id: e.id,
+          username: e.username,
+          role: e.role,
+          full_name: e.full_name,
+          phoneCountryCode: e.phoneCountryCode,
+          phoneNumber: e.phoneNumber,
+          phone:
+            e.phoneCountryCode && e.phoneNumber
+              ? `${e.phoneCountryCode} ${e.phoneNumber}`
+              : e.phoneCountryCode || null,
+          email: e.email,
+          isBlocked: e.isBlocked,
+          createdAt: e.createdAt,
+          updatedAt: e.updatedAt,
+        })),
+      };
+
+      return res.json(data);
+    }
+
+    // Для редактора возвращаем информацию о нем самом, об отеле и об админе
+    if (role === ROLES.EDITOR) {
+      const editor = await adminRepo.findOne({
+        where: { id: sub },
+        relations: ["createdBy"],
+      });
+
+      if (!editor) {
+        return res.status(404).json({ message: "Editor not found" });
+      }
+
+      const admin = editor.createdBy;
+      if (!admin) {
+        return res.status(404).json({ message: "Admin (hotel owner) not found" });
+      }
+
+      // Формируем ответ с информацией о редакторе, об отеле и об админе
+      const data = {
+        // Информация о редакторе
+        editor: {
+          id: editor.id,
+          username: editor.username,
+          role: editor.role,
+          full_name: editor.full_name,
+          phoneCountryCode: editor.phoneCountryCode,
+          phoneNumber: editor.phoneNumber,
+          phone:
+            editor.phoneCountryCode && editor.phoneNumber
+              ? `${editor.phoneCountryCode} ${editor.phoneNumber}`
+              : editor.phoneCountryCode || null,
+          email: editor.email,
+          isBlocked: editor.isBlocked,
+          createdAt: editor.createdAt,
+          updatedAt: editor.updatedAt,
+        },
+        // Информация об отеле (из админа)
+        hotel: {
+          hotel_name: admin.hotel_name,
+          street: admin.street,
+          buildingNumber: admin.buildingNumber,
+          apartmentNumber: admin.apartmentNumber,
+          country: admin.country,
+          province: admin.province,
+          postalCode: admin.postalCode,
+          latitude: admin.latitude,
+          longitude: admin.longitude,
+          logo_url: admin.logo_url,
+          checkInHour: admin.checkInHour,
+          checkOutHour: admin.checkOutHour,
+        },
+        // Информация об админе (владельце отеля)
+        admin: {
+          id: admin.id,
+          username: admin.username,
+          full_name: admin.full_name,
+          phoneCountryCode: admin.phoneCountryCode,
+          phoneNumber: admin.phoneNumber,
+          phone:
+            admin.phoneCountryCode && admin.phoneNumber
+              ? `${admin.phoneCountryCode} ${admin.phoneNumber}`
+              : admin.phoneCountryCode || null,
+          email: admin.email,
+        },
+      };
+
+      return res.json(data);
+    }
+
+    // Для суперадмина возвращаем список всех админов (как в getUsers)
+    if (role === ROLES.SUPER) {
+      const admins = await adminRepo.find({
+        where: { role: ROLES.ADMIN },
+        relations: ["createdEditorAdmins"],
+        order: { username: "ASC" },
+      });
+
+      const data = admins.map((a) => ({
+        id: a.id,
+        username: a.username,
+        role: a.role,
+        hotel_name: a.hotel_name,
+        street: a.street,
+        buildingNumber: a.buildingNumber,
+        apartmentNumber: a.apartmentNumber,
+        country: a.country,
+        province: a.province,
+        postalCode: a.postalCode,
+        latitude: a.latitude,
+        longitude: a.longitude,
+        full_name: a.full_name,
+        phoneCountryCode: a.phoneCountryCode,
+        phoneNumber: a.phoneNumber,
+        phone:
+          a.phoneCountryCode && a.phoneNumber
+            ? `${a.phoneCountryCode} ${a.phoneNumber}`
+            : a.phoneCountryCode || null,
+        logo_url: a.logo_url,
+        email: a.email,
+        isBlocked: a.isBlocked,
+        checkInHour: a.checkInHour,
+        checkOutHour: a.checkOutHour,
+        createdAt: a.createdAt,
+        updatedAt: a.updatedAt,
+        editorsCount: a.createdEditorAdmins?.length ?? 0,
+        editors: (a.createdEditorAdmins || []).map((e) => ({
+          id: e.id,
+          username: e.username,
+          role: e.role,
+          full_name: e.full_name,
+          phoneCountryCode: e.phoneCountryCode,
+          phoneNumber: e.phoneNumber,
+          phone:
+            e.phoneCountryCode && e.phoneNumber
+              ? `${e.phoneCountryCode} ${e.phoneNumber}`
+              : e.phoneCountryCode || null,
+          email: e.email,
+          isBlocked: e.isBlocked,
+          createdAt: e.createdAt,
+          updatedAt: e.updatedAt,
+        })),
+      }));
+
+      return res.json(data);
+    }
+
+    return res.status(403).json({ message: "Access denied" });
+  } catch (error) {
+    console.error("[getProfile] Error:", error);
+    return res.status(500).json({
+      message: "Failed to fetch profile",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
   }
 };
 
@@ -415,6 +625,12 @@ export const loginAdmin = async (req: Request, res: Response) => {
   }
 
   // 👇 КЛЮЧЕВОЕ: для editor кладём adminId = id владельца отеля (createdBy.id)
+  // Перевіряємо, що для редактора є createdBy
+  if (admin.role === ROLES.EDITOR && !admin.createdBy) {
+    return res.status(500).json({ 
+      message: "Editor account is missing owner (createdBy) - contact administrator" 
+    });
+  }
   const ownerAdminId =
     admin.role === ROLES.EDITOR ? admin.createdBy!.id : admin.id;
 
@@ -511,12 +727,13 @@ export const createEditorAdmin = async (req: AuthRequest, res: Response) => {
   const hotelData = copyHotelDataFromAdmin(creatorAdmin);
 
   // Обработка телефона: приоритет у новых полей phoneCountryCode/phoneNumber
-  let finalPhoneCountryCode = phoneCountryCode ?? null;
-  let finalPhoneNumber = phoneNumber ?? null;
+  // Нормализуем пустые строки в null
+  let finalPhoneCountryCode = phoneCountryCode && phoneCountryCode.trim() ? phoneCountryCode.trim() : null;
+  let finalPhoneNumber = phoneNumber && phoneNumber.trim() ? phoneNumber.trim() : null;
 
   // Если указан старый формат phone, пытаемся распарсить
-  if (phone && !finalPhoneCountryCode && !finalPhoneNumber) {
-    const phoneMatch = phone.match(/^(\+\d{1,3})(.*)$/);
+  if (phone && phone.trim() && !finalPhoneCountryCode && !finalPhoneNumber) {
+    const phoneMatch = phone.trim().match(/^(\+\d{1,3})(.*)$/);
     if (phoneMatch) {
       finalPhoneCountryCode = phoneMatch[1];
       finalPhoneNumber = phoneMatch[2].replace(/[^\d]/g, "");
@@ -525,27 +742,26 @@ export const createEditorAdmin = async (req: AuthRequest, res: Response) => {
     }
   }
 
-  // Если телефон не указан, копируем из данных отеля (hotelData уже содержит phoneCountryCode и phoneNumber)
-  if (
-    !finalPhoneCountryCode &&
-    !finalPhoneNumber &&
-    hotelData.phoneCountryCode
-  ) {
-    finalPhoneCountryCode = hotelData.phoneCountryCode ?? null;
-    finalPhoneNumber = hotelData.phoneNumber ?? null;
-  }
+  // Телефон редактора должен быть указан явно, не копируем из админа
+  // Если телефон не указан, оставляем null
 
   // Создаём нового редактора с данными отеля и создателя
+  // Важно: email, phoneCountryCode и phoneNumber - это личные данные редактора,
+  // они не должны копироваться из админа
+  const { email: _, phoneCountryCode: __, phoneNumber: ___, ...hotelDataWithoutPersonal } = hotelData;
+  
   const newEditor = adminRepo.create({
     username,
     password: hashedPassword,
     role: ROLES.EDITOR,
     createdBy: creatorAdmin,
     full_name,
+    // Личные данные редактора (не копируются из админа)
     phoneCountryCode: finalPhoneCountryCode,
     phoneNumber: finalPhoneNumber,
-    email,
-    ...hotelData,
+    email: email || null, // Если email не указан, ставим null, а не копируем из админа
+    // Данные отеля (копируются из админа)
+    ...hotelDataWithoutPersonal,
   });
 
   const saved = await adminRepo.save(newEditor);
@@ -660,6 +876,166 @@ export const deleteAdminOrEditor = async (req: AuthRequest, res: Response) => {
 
   await adminRepo.remove(targetUser);
   res.json({ message: `User "${usernameToDelete}" deleted successfully` });
+};
+
+/**
+ * 🔒 PUT /auth/editor/:username/block — block editor (admin only)
+ * Админ может блокировать только своих редакторов
+ */
+export const blockEditor = async (req: AuthRequest, res: Response) => {
+  const username = req.params.username;
+  const ownerAdminId = req.user!.adminId;
+  const adminRepo = AppDataSource.getRepository(Admin);
+  
+  const target = await adminRepo.findOne({
+    where: { username },
+    relations: ["createdBy"],
+  });
+
+  if (!target) {
+    return res.status(404).json({ message: "Editor not found" });
+  }
+
+  if (target.role !== ROLES.EDITOR) {
+    return res.status(400).json({ message: "User is not an editor" });
+  }
+
+  // Проверяем, что редактор принадлежит текущему админу
+  if (target.createdBy?.id !== ownerAdminId) {
+    return res.status(403).json({ message: "Access denied: can only block own editors" });
+  }
+
+  target.isBlocked = true;
+  await adminRepo.save(target);
+  
+  res.json({ message: `Editor ${username} blocked successfully` });
+};
+
+/**
+ * 🔓 PUT /auth/editor/:username/unblock — unblock editor (admin only)
+ * Админ может разблокировать только своих редакторов
+ */
+export const unblockEditor = async (req: AuthRequest, res: Response) => {
+  const username = req.params.username;
+  const ownerAdminId = req.user!.adminId;
+  const adminRepo = AppDataSource.getRepository(Admin);
+  
+  const target = await adminRepo.findOne({
+    where: { username },
+    relations: ["createdBy"],
+  });
+
+  if (!target) {
+    return res.status(404).json({ message: "Editor not found" });
+  }
+
+  if (target.role !== ROLES.EDITOR) {
+    return res.status(400).json({ message: "User is not an editor" });
+  }
+
+  // Проверяем, что редактор принадлежит текущему админу
+  if (target.createdBy?.id !== ownerAdminId) {
+    return res.status(403).json({ message: "Access denied: can only unblock own editors" });
+  }
+
+  target.isBlocked = false;
+  await adminRepo.save(target);
+  
+  res.json({ message: `Editor ${username} unblocked successfully` });
+};
+
+/**
+ * 🔧 PUT /auth/editor/:username — update editor (admin only)
+ * Админ может редактировать только своих редакторов
+ * Нельзя изменять: username, password, role
+ */
+export const updateEditor = async (req: AuthRequest, res: Response) => {
+  const username = req.params.username;
+  const ownerAdminId = req.user!.adminId;
+  const adminRepo = AppDataSource.getRepository(Admin);
+  
+  const {
+    full_name,
+    phoneCountryCode,
+    phoneNumber,
+    phone, // Для обратной совместимости
+    email,
+  } = req.body as {
+    full_name?: string | null;
+    phoneCountryCode?: string | null;
+    phoneNumber?: string | null;
+    phone?: string | null;
+    email?: string | null;
+  };
+
+  const target = await adminRepo.findOne({
+    where: { username },
+    relations: ["createdBy"],
+  });
+
+  if (!target) {
+    return res.status(404).json({ message: "Editor not found" });
+  }
+
+  if (target.role !== ROLES.EDITOR) {
+    return res.status(400).json({ message: "User is not an editor" });
+  }
+
+  // Проверяем, что редактор принадлежит текущему админу
+  if (target.createdBy?.id !== ownerAdminId) {
+    return res.status(403).json({ message: "Access denied: can only edit own editors" });
+  }
+
+  // Обновляем поля (только разрешенные)
+  if (full_name !== undefined) {
+    target.full_name = full_name && full_name.trim() ? full_name.trim() : null;
+  }
+
+  // Обработка телефона
+  if (phoneCountryCode !== undefined || phoneNumber !== undefined || phone !== undefined) {
+    let finalPhoneCountryCode = phoneCountryCode && phoneCountryCode.trim() ? phoneCountryCode.trim() : null;
+    let finalPhoneNumber = phoneNumber && phoneNumber.trim() ? phoneNumber.trim() : null;
+
+    // Если указан старый формат phone, пытаемся распарсить
+    if (phone && phone.trim() && !finalPhoneCountryCode && !finalPhoneNumber) {
+      const phoneMatch = phone.trim().match(/^(\+\d{1,3})(.*)$/);
+      if (phoneMatch) {
+        finalPhoneCountryCode = phoneMatch[1];
+        finalPhoneNumber = phoneMatch[2].replace(/[^\d]/g, "");
+      } else {
+        finalPhoneNumber = phone.replace(/[^\d]/g, "");
+      }
+    }
+
+    target.phoneCountryCode = finalPhoneCountryCode;
+    target.phoneNumber = finalPhoneNumber;
+  }
+
+  if (email !== undefined) {
+    target.email = email && email.trim() ? email.trim() : null;
+  }
+
+  const saved = await adminRepo.save(target);
+
+  // Возвращаем обновленные данные редактора
+  res.json({
+    message: `Editor ${username} updated successfully`,
+    editor: {
+      id: saved.id,
+      username: saved.username,
+      role: saved.role,
+      full_name: saved.full_name,
+      phoneCountryCode: saved.phoneCountryCode,
+      phoneNumber: saved.phoneNumber,
+      phone: saved.phoneCountryCode && saved.phoneNumber
+        ? `${saved.phoneCountryCode} ${saved.phoneNumber}`
+        : saved.phoneCountryCode || null,
+      email: saved.email,
+      isBlocked: saved.isBlocked,
+      createdAt: saved.createdAt,
+      updatedAt: saved.updatedAt,
+    },
+  });
 };
 
 // 🔧 UPDATE: супер-адмін може редагувати профіль адміна-«власника» (готель)
