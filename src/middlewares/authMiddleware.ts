@@ -2,6 +2,8 @@
 import { ROLES, Role } from "../auth/roles";
 import { Request, Response, NextFunction } from "express";
 import jwt, { JwtPayload } from "jsonwebtoken";
+import { AppDataSource } from "../config/data-source";
+import { Admin } from "../entities/Admin";
 
 export interface JwtUser {
   adminId: number; // id власника готелю (для editor — це id admin'а)
@@ -63,7 +65,7 @@ export const isSuperadmin = (
 };
 
 /** Дозволено лише головному admin (не editor, не superadmin) */
-export const isAdmin = (
+export const isAdmin = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
@@ -72,11 +74,13 @@ export const isAdmin = (
   if (req.user.role !== ROLES.ADMIN) {
     return res.status(403).json({ message: "Only admin allowed" });
   }
-  next();
+  
+  // Проверка блокировки админа
+  await checkUserNotBlocked(req, res, next);
 };
 
 /** Дозволено admin або editor */
-export const isEditorOrAdmin = (
+export const isEditorOrAdmin = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
@@ -85,5 +89,58 @@ export const isEditorOrAdmin = (
   if (!(req.user.role === ROLES.ADMIN || req.user.role === ROLES.EDITOR)) {
     return res.status(403).json({ message: "Access denied" });
   }
-  next();
+  
+  // Проверка блокировки админа или редактора
+  await checkUserNotBlocked(req, res, next);
+};
+
+/** Перевіряє, чи не заблокований користувач (використовується після authenticateToken) */
+export const checkUserNotBlocked = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user) {
+    return res.status(401).json({ message: "No token provided" });
+  }
+
+  const adminRepo = AppDataSource.getRepository(Admin);
+  
+  try {
+    // Для суперадмина не проверяем блокировку
+    if (req.user.role === ROLES.SUPER) {
+      return next();
+    }
+
+    // Загружаем пользователя из БД
+    const user = await adminRepo.findOne({
+      where: { id: req.user.sub },
+      relations: ["createdBy"],
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Проверка блокировки админа
+    if (user.role === ROLES.ADMIN && user.isBlocked) {
+      return res.status(403).json({
+        message: "Ваш акаунт заблоковано, зверніться до адміністратора системи",
+      });
+    }
+
+    // Проверка блокировки редактора: сам редактор заблокирован ИЛИ его создатель заблокирован
+    if (user.role === ROLES.EDITOR) {
+      if (user.isBlocked || user.createdBy?.isBlocked) {
+        return res.status(403).json({
+          message: "Ваш акаунт заблоковано, зверніться до адміністратора системи",
+        });
+      }
+    }
+
+    next();
+  } catch (error) {
+    console.error("Error checking user block status:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
 };

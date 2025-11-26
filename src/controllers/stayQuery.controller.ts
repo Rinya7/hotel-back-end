@@ -187,6 +187,16 @@ export const searchStays = async (req: AuthRequest, res: Response) => {
 /** GET /stays/:id — отримати проживання за ID */
 export const getStayById = async (req: AuthRequest, res: Response) => {
   try {
+    // Додаткова перевірка для редакторів
+    if (!req.user) {
+      console.error("[getStayById] No user in request");
+      return res.status(401).json({ message: "No token provided" });
+    }
+    if (req.user.role !== "admin" && req.user.role !== "editor") {
+      console.error("[getStayById] Invalid role:", req.user.role);
+      return res.status(403).json({ message: "Access denied" });
+    }
+    
     const ownerAdminId = getOwnerAdminId(req);
     const stayId = Number(req.params.id);
 
@@ -206,14 +216,35 @@ export const getStayById = async (req: AuthRequest, res: Response) => {
 
     return res.json(stay);
   } catch (error) {
-    console.error("Помилка при отриманні stay by id:", error);
-    return res.status(500).json({ message: "Помилка при отриманні проживання" });
+    console.error("[getStayById] Error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    // Якщо помилка з getOwnerAdminId - повертаємо 401/403, а не 500
+    if (errorMessage.includes("No auth user") || errorMessage.includes("Invalid adminId")) {
+      return res.status(401).json({ 
+        message: "Authentication error", 
+        error: errorMessage 
+      });
+    }
+    return res.status(500).json({ 
+      message: "Помилка при отриманні проживання",
+      error: errorMessage 
+    });
   }
 };
 
 /** GET /stays/:id/history — історія змін статусів проживання */
 export const getStayHistory = async (req: AuthRequest, res: Response) => {
   try {
+    // Додаткова перевірка для редакторів
+    if (!req.user) {
+      console.error("[getStayHistory] No user in request");
+      return res.status(401).json({ message: "No token provided" });
+    }
+    if (req.user.role !== "admin" && req.user.role !== "editor") {
+      console.error("[getStayHistory] Invalid role:", req.user.role);
+      return res.status(403).json({ message: "Access denied" });
+    }
+    
     const ownerAdminId = getOwnerAdminId(req);
     const stayId = Number(req.params.id);
 
@@ -254,7 +285,15 @@ export const getStayHistory = async (req: AuthRequest, res: Response) => {
       logs,
     });
   } catch (error) {
-    console.error("Помилка при отриманні stay history:", error);
+    console.error("[getStayHistory] Error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    // Якщо помилка з getOwnerAdminId - повертаємо 401/403, а не порожній результат
+    if (errorMessage.includes("No auth user") || errorMessage.includes("Invalid adminId")) {
+      return res.status(401).json({ 
+        message: "Authentication error", 
+        error: errorMessage 
+      });
+    }
     // Повертаємо порожній результат (той самий формат, що й при успіху)
     return res.json({
       stayId: Number(req.params.id) || 0,

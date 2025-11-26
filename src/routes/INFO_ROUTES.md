@@ -11,6 +11,8 @@ src/routes/
 ├── roomStay.ts             # Проживання по кімнатах
 ├── stayRoutes.ts           # Операції з проживаннями
 ├── roomPolicy.routes.ts    # Політики кімнат
+├── guest.routes.ts         # Гостьовий доступ
+├── audit.routes.ts         # Аудит логів
 └── INFO_*.md              # Документація
 ```
 
@@ -49,6 +51,12 @@ router.put('/number/:roomNumber/stays/close', authMiddleware, closeStay);
 router.post('/:id/check-in', authMiddleware, checkIn);
 router.post('/:id/check-out', authMiddleware, checkOut);
 router.post('/:id/cancel', authMiddleware, cancelStay);
+```
+
+### guest.routes.ts
+```typescript
+router.post('/stays/:stayId/link', authenticateToken, isEditorOrAdmin, createGuestAccessLink);
+router.get('/access/:token', getGuestAccessByToken); // Публічний ендпоінт
 ```
 
 ## Повна карта endpoints
@@ -94,6 +102,12 @@ router.post('/:id/cancel', authMiddleware, cancelStay);
 | GET | `/stays/today/arrivals` | Сьогоднішні заїзди | admin, editor |
 | GET | `/stays/today/departures` | Сьогоднішні виїзди | admin, editor |
 
+### Гостьовий доступ (`/guest`)
+| Метод | URL | Опис | Доступ |
+|-------|-----|------|--------|
+| POST | `/guest/stays/:stayId/link` | Створити/отримати токен доступу | admin, editor |
+| GET | `/guest/access/:token` | Отримати дані проживання по токену | Публічний (по токену) |
+
 ## Підключення в app.ts
 ```typescript
 // src/app.ts
@@ -101,6 +115,8 @@ app.use('/auth', authRoutes);
 app.use('/rooms', roomRoutes);
 app.use('/rooms', roomStay);
 app.use('/stays', stayRoutes);
+app.use('/audit', auditRoutes);
+app.use('/guest', guestRoutes);
 app.use(roomPolicyRoutes);
 ```
 

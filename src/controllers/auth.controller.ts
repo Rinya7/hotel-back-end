@@ -230,8 +230,9 @@ export const createAdminBySuperadmin = async (
     ...(typeof normalizedCheckOutHour !== "undefined"
       ? { checkOutHour: normalizedCheckOutHour }
       : {}),
-    ...(defaultWifiName ? { defaultWifiName } : {}),
-    ...(defaultWifiPassword ? { defaultWifiPassword } : {}),
+    // Wi-Fi настройки: используем переданные значения или дефолтные из entity
+    defaultWifiName: normalizeNullableString(defaultWifiName) ?? null,
+    defaultWifiPassword: normalizeNullableString(defaultWifiPassword) ?? null,
   });
 
   let saved;
@@ -310,6 +311,8 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
       isBlocked: a.isBlocked,
       checkInHour: a.checkInHour, // 👈 show hotel policy
       checkOutHour: a.checkOutHour, // 👈 show hotel policy
+      defaultWifiName: a.defaultWifiName, // Wi-Fi настройки
+      defaultWifiPassword: a.defaultWifiPassword, // Wi-Fi настройки
       createdAt: a.createdAt,
       updatedAt: a.updatedAt,
       editorsCount: a.createdEditorAdmins?.length ?? 0,
@@ -318,6 +321,8 @@ export const getUsers = async (req: AuthRequest, res: Response) => {
         username: e.username,
         role: e.role, // завжди "editor"
         full_name: e.full_name,
+        phoneCountryCode: e.phoneCountryCode,
+        phoneNumber: e.phoneNumber,
         // Для обратной совместимости формируем phone из компонентов
         phone:
           e.phoneCountryCode && e.phoneNumber
@@ -413,6 +418,8 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
         isBlocked: admin.isBlocked,
         checkInHour: admin.checkInHour,
         checkOutHour: admin.checkOutHour,
+        defaultWifiName: admin.defaultWifiName,
+        defaultWifiPassword: admin.defaultWifiPassword,
         createdAt: admin.createdAt,
         updatedAt: admin.updatedAt,
         editorsCount: admin.createdEditorAdmins?.length ?? 0,
@@ -513,51 +520,61 @@ export const getProfile = async (req: AuthRequest, res: Response) => {
         order: { username: "ASC" },
       });
 
-      const data = admins.map((a) => ({
-        id: a.id,
-        username: a.username,
-        role: a.role,
-        hotel_name: a.hotel_name,
-        street: a.street,
-        buildingNumber: a.buildingNumber,
-        apartmentNumber: a.apartmentNumber,
-        country: a.country,
-        province: a.province,
-        postalCode: a.postalCode,
-        latitude: a.latitude,
-        longitude: a.longitude,
-        full_name: a.full_name,
-        phoneCountryCode: a.phoneCountryCode,
-        phoneNumber: a.phoneNumber,
-        phone:
-          a.phoneCountryCode && a.phoneNumber
-            ? `${a.phoneCountryCode} ${a.phoneNumber}`
-            : a.phoneCountryCode || null,
-        logo_url: a.logo_url,
-        email: a.email,
-        isBlocked: a.isBlocked,
-        checkInHour: a.checkInHour,
-        checkOutHour: a.checkOutHour,
-        createdAt: a.createdAt,
-        updatedAt: a.updatedAt,
-        editorsCount: a.createdEditorAdmins?.length ?? 0,
-        editors: (a.createdEditorAdmins || []).map((e) => ({
-          id: e.id,
-          username: e.username,
-          role: e.role,
-          full_name: e.full_name,
-          phoneCountryCode: e.phoneCountryCode,
-          phoneNumber: e.phoneNumber,
+      const data = admins.map((a) => {
+        // Отладочный вывод для проверки данных из БД
+        console.log(`[getProfile] Admin ${a.username} Wi-Fi data:`, {
+          defaultWifiName: a.defaultWifiName,
+          defaultWifiPassword: a.defaultWifiPassword ? "***" : null,
+        });
+        
+        return {
+          id: a.id,
+          username: a.username,
+          role: a.role,
+          hotel_name: a.hotel_name,
+          street: a.street,
+          buildingNumber: a.buildingNumber,
+          apartmentNumber: a.apartmentNumber,
+          country: a.country,
+          province: a.province,
+          postalCode: a.postalCode,
+          latitude: a.latitude,
+          longitude: a.longitude,
+          full_name: a.full_name,
+          phoneCountryCode: a.phoneCountryCode,
+          phoneNumber: a.phoneNumber,
           phone:
-            e.phoneCountryCode && e.phoneNumber
-              ? `${e.phoneCountryCode} ${e.phoneNumber}`
-              : e.phoneCountryCode || null,
-          email: e.email,
-          isBlocked: e.isBlocked,
-          createdAt: e.createdAt,
-          updatedAt: e.updatedAt,
-        })),
-      }));
+            a.phoneCountryCode && a.phoneNumber
+              ? `${a.phoneCountryCode} ${a.phoneNumber}`
+              : a.phoneCountryCode || null,
+          logo_url: a.logo_url,
+          email: a.email,
+          isBlocked: a.isBlocked,
+          checkInHour: a.checkInHour,
+          checkOutHour: a.checkOutHour,
+          defaultWifiName: a.defaultWifiName,
+          defaultWifiPassword: a.defaultWifiPassword,
+          createdAt: a.createdAt,
+          updatedAt: a.updatedAt,
+          editorsCount: a.createdEditorAdmins?.length ?? 0,
+          editors: (a.createdEditorAdmins || []).map((e) => ({
+            id: e.id,
+            username: e.username,
+            role: e.role,
+            full_name: e.full_name,
+            phoneCountryCode: e.phoneCountryCode,
+            phoneNumber: e.phoneNumber,
+            phone:
+              e.phoneCountryCode && e.phoneNumber
+                ? `${e.phoneCountryCode} ${e.phoneNumber}`
+                : e.phoneCountryCode || null,
+            email: e.email,
+            isBlocked: e.isBlocked,
+            createdAt: e.createdAt,
+            updatedAt: e.updatedAt,
+          })),
+        };
+      });
 
       return res.json(data);
     }
@@ -611,13 +628,19 @@ export const loginAdmin = async (req: Request, res: Response) => {
   if (!admin) {
     return res.status(401).json({ message: "Invalid credentials" });
   }
+  // Проверка блокировки админа
   if (admin.role === ROLES.ADMIN && admin.isBlocked) {
-    return res.status(403).json({ message: "Account is blocked" });
+    return res.status(403).json({ 
+      message: "Ваш акаунт заблоковано, зверніться до адміністратора системи" 
+    });
   }
-  if (admin.role === ROLES.EDITOR && admin.createdBy?.isBlocked) {
-    return res
-      .status(403)
-      .json({ message: "Admin is blocked — editor access denied" });
+  // Проверка блокировки редактора: сам редактор заблокирован ИЛИ его создатель заблокирован
+  if (admin.role === ROLES.EDITOR) {
+    if (admin.isBlocked || admin.createdBy?.isBlocked) {
+      return res.status(403).json({ 
+        message: "Ваш акаунт заблоковано, зверніться до адміністратора системи" 
+      });
+    }
   }
   const isMatch = await bcrypt.compare(password, admin.password);
   if (!isMatch) {
@@ -1085,6 +1108,8 @@ export const updateAdminHotelProfile = async (
     logo_url,
     checkInHour,
     checkOutHour,
+    defaultWifiName,
+    defaultWifiPassword,
   }: {
     hotel_name?: string;
     street?: string | null;
@@ -1103,6 +1128,8 @@ export const updateAdminHotelProfile = async (
     logo_url?: string | null;
     checkInHour?: number | null;
     checkOutHour?: number | null;
+    defaultWifiName?: string | null;
+    defaultWifiPassword?: string | null;
   } = req.body;
 
   // Валідовуємо години, якщо прийшли
@@ -1235,6 +1262,13 @@ export const updateAdminHotelProfile = async (
   if (typeof checkInHour !== "undefined") admin.checkInHour = checkInHour;
   if (typeof checkOutHour !== "undefined") admin.checkOutHour = checkOutHour;
 
+  // Обновление Wi-Fi настроек
+  const wifiNameNorm = normalizeNullableString(defaultWifiName);
+  if (typeof wifiNameNorm !== "undefined") admin.defaultWifiName = wifiNameNorm;
+  
+  const wifiPasswordNorm = normalizeNullableString(defaultWifiPassword);
+  if (typeof wifiPasswordNorm !== "undefined") admin.defaultWifiPassword = wifiPasswordNorm;
+
   const saved = await repo.save(admin);
 
   return res.json({
@@ -1265,6 +1299,8 @@ export const updateAdminHotelProfile = async (
       logo_url: saved.logo_url,
       checkInHour: saved.checkInHour,
       checkOutHour: saved.checkOutHour,
+      defaultWifiName: saved.defaultWifiName,
+      defaultWifiPassword: saved.defaultWifiPassword,
       updatedAt: saved.updatedAt,
     },
   });

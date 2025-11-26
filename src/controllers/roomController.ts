@@ -10,34 +10,36 @@ import { isHourOrNull } from "../utils/hours";
 import { getOwnerAdminId } from "../utils/owner";
 import { ROLES } from "../auth/roles";
 import { updateRoomStatus } from "./stayOps.controller";
+import { CreateRoomBody, UpdateRoomBody } from "../types/room";
+import { RoomStatus } from "../types/ops";
 
-type RoomStatus = "free" | "occupied" | "cleaning";
+//type RoomStatus = "free" | "occupied" | "cleaning";
 
-/** Narrow request body types (strict, no any) */
-interface CreateRoomBody {
-  roomNumber: string;
-  floor: number;
-  capacity: number;
-  checkInHour?: number | null; // optional; null = follow hotel default
-  checkOutHour?: number | null; // optional; null = follow hotel default
-  wifiName?: string | null;
-  wifiPassword?: string | null;
-  qrBarUrl?: string | null;
-  mapPosition?: string | null;
-}
+///** Narrow request body types (strict, no any) */
+//interface CreateRoomBody {
+//  roomNumber: string;
+//  floor: number;
+//  capacity: number;
+//  checkInHour?: number | null; // optional; null = follow hotel default
+//  checkOutHour?: number | null; // optional; null = follow hotel default
+//  wifiName?: string | null;
+//  wifiPassword?: string | null;
+//  qrBarUrl?: string | null;
+//  mapPosition?: string | null;
+//}
 
-interface UpdateRoomBody {
-  /** full edit; only the listed fields are allowed to change */
-  roomNumber?: string;
-  floor?: number;
-  capacity?: number;
-  checkInHour?: number | null;
-  checkOutHour?: number | null;
-  wifiName?: string | null;
-  wifiPassword?: string | null;
-  qrBarUrl?: string | null;
-  mapPosition?: string | null;
-}
+//interface UpdateRoomBody {
+//  /** full edit; only the listed fields are allowed to change */
+//  roomNumber?: string;
+//  floor?: number;
+//  capacity?: number;
+//  checkInHour?: number | null;
+//  checkOutHour?: number | null;
+//  wifiName?: string | null;
+//  wifiPassword?: string | null;
+//  qrBarUrl?: string | null;
+//  mapPosition?: string | null;
+//}
 
 /** Helper: validate integer >= 0 */
 function isNonNegativeInt(v: unknown): v is number {
@@ -401,6 +403,16 @@ export const deleteRoom = async (req: AuthRequest, res: Response) => {
 /** GET /rooms/number/:roomNumber/history — історія змін статусів кімнати */
 export const getRoomHistory = async (req: AuthRequest, res: Response) => {
   try {
+    // Додаткова перевірка для редакторів
+    if (!req.user) {
+      console.error("[getRoomHistory] No user in request");
+      return res.status(401).json({ message: "No token provided" });
+    }
+    if (req.user.role !== "admin" && req.user.role !== "editor") {
+      console.error("[getRoomHistory] Invalid role:", req.user.role);
+      return res.status(403).json({ message: "Access denied" });
+    }
+    
     const ownerAdminId = getOwnerAdminId(req);
     const { roomNumber } = req.params;
 
@@ -446,7 +458,15 @@ export const getRoomHistory = async (req: AuthRequest, res: Response) => {
       logs,
     });
   } catch (error) {
-    console.error("Помилка при отриманні room history:", error);
+    console.error("[getRoomHistory] Error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    // Якщо помилка з getOwnerAdminId - повертаємо 401/403
+    if (errorMessage.includes("No auth user") || errorMessage.includes("Invalid adminId")) {
+      return res.status(401).json({ 
+        message: "Authentication error", 
+        error: errorMessage 
+      });
+    }
     // Повертаємо порожній результат (той самий формат, що й при успіху)
     return res.json({
       roomId: 0,

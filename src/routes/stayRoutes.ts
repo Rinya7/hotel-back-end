@@ -147,6 +147,13 @@ import {
   checkOutStay,
   cancelStay,
   updateStayStatus,
+  getNeedsActionStays,
+  testAutoCheck,
+  resolveNoShow,
+  resolveCheckInNow,
+  resolveCheckOutNow,
+  resolveEditDates,
+  resolveExtendStay,
 } from "../controllers/stayOps.controller";
 
 const router = Router();
@@ -214,6 +221,18 @@ router.put("/:id/status", authenticateToken, isEditorOrAdmin, updateStayStatus);
 router.get("/search", authenticateToken, isEditorOrAdmin, searchStays);
 
 /**
+ * Get stays that need action (needsAction = true)
+ * GET /stays/needs-action
+ * Важливо: має бути перед /:id, інакше Express спробує обробити /needs-action як id
+ */
+router.get(
+  "/needs-action",
+  authenticateToken,
+  isEditorOrAdmin,
+  getNeedsActionStays
+);
+
+/**
  * Get stay status change history
  * GET /stays/:id/history
  * Важливо: має бути перед /:id, інакше Express спробує обробити /history як id
@@ -225,5 +244,55 @@ router.get("/:id/history", authenticateToken, isEditorOrAdmin, getStayHistory);
  * GET /stays/:id
  */
 router.get("/:id", authenticateToken, isEditorOrAdmin, getStayById);
+
+/**
+ * Test endpoint: Manual trigger for auto-check (for testing)
+ * POST /stays/test-auto-check
+ */
+router.post(
+  "/test-auto-check",
+  authenticateToken,
+  isEditorOrAdmin,
+  testAutoCheck
+);
+
+/**
+ * Resolve actions for stays that need attention
+ * POST /stays/:id/resolve/no-show
+ * POST /stays/:id/resolve/check-in-now
+ * POST /stays/:id/resolve/check-out-now
+ * POST /stays/:id/resolve/edit-dates
+ * POST /stays/:id/resolve/extend-stay
+ */
+router.post(
+  "/:id/resolve/no-show",
+  authenticateToken,
+  isEditorOrAdmin,
+  resolveNoShow
+);
+router.post(
+  "/:id/resolve/check-in-now",
+  authenticateToken,
+  isEditorOrAdmin,
+  resolveCheckInNow
+);
+router.post(
+  "/:id/resolve/check-out-now",
+  authenticateToken,
+  isEditorOrAdmin,
+  resolveCheckOutNow
+);
+router.post(
+  "/:id/resolve/edit-dates",
+  authenticateToken,
+  isEditorOrAdmin,
+  resolveEditDates
+);
+router.post(
+  "/:id/resolve/extend-stay",
+  authenticateToken,
+  isEditorOrAdmin,
+  resolveExtendStay
+);
 
 export default router;

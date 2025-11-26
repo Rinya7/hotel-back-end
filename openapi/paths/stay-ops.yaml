@@ -114,3 +114,262 @@ stay_update_status:
     responses:
       "200":
         description: OK
+
+# === Needs Action Endpoints ===
+
+stays_needs_action:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Ops]
+    summary: Отримати список stays, які потребують дії (needsAction = true)
+    description: >
+      Повертає список stays з needsAction=true, які потребують уваги адміністратора
+      через просрочені check-in або check-out дати.
+    responses:
+      "200":
+        description: Список stays, які потребують дії
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                count:
+                  type: integer
+                  description: Кількість stays
+                items:
+                  type: array
+                  items:
+                    $ref: "../openapi.base.yaml#/components/schemas/StayNeedsAction"
+
+stays_test_auto_check:
+  post:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Ops]
+    summary: Тестовий endpoint для ручного запуску перевірки просрочених stays
+    description: >
+      Виконує перевірку просрочених check-in та check-out дат вручну.
+      Використовується для тестування логіки needsAction без очікування cron job.
+      Знаходить stays з просроченими датами та встановлює needsAction=true.
+    responses:
+      "200":
+        description: Перевірка виконана успішно
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  example: "Auto-check completed successfully"
+                stats:
+                  type: object
+                  properties:
+                    missedCheckIns:
+                      type: integer
+                      description: Кількість stays з просроченим check-in
+                    missedCheckOuts:
+                      type: integer
+                      description: Кількість stays з просроченим check-out
+                    total:
+                      type: integer
+                      description: Загальна кількість позначених stays
+
+stay_resolve_no_show:
+  post:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Ops]
+    summary: Скасувати stay (зміна статусу на cancelled)
+    description: >
+      Скасовує stay з missed_checkin (зміна статусу на cancelled).
+      Очищає needsAction та needsActionReason.
+      Логує зміну статусу.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              comment:
+                type: string
+                nullable: true
+                description: Коментар до логу (необов'язковий)
+    responses:
+      "200":
+        description: Stay скасовано успішно
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/StayRoomSyncResponse"
+      "400":
+        description: Stay не потребує скасування
+      "404":
+        description: Stay not found
+
+stay_resolve_check_in_now:
+  post:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Ops]
+    summary: Виконати check-in зараз (occupied)
+    description: >
+      Виконує check-in для stay з missed_checkin.
+      Встановлює checkIn = today, status = occupied, room.status = occupied.
+      Очищає needsAction та needsActionReason.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              comment:
+                type: string
+                nullable: true
+                description: Коментар до логу (необов'язковий)
+    responses:
+      "200":
+        description: Stay заселено успішно
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/StayRoomSyncResponse"
+      "400":
+        description: Stay does not require check-in resolution
+      "404":
+        description: Stay not found
+
+stay_resolve_check_out_now:
+  post:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Ops]
+    summary: Виконати check-out зараз (completed)
+    description: >
+      Виконує check-out для stay з missed_checkout.
+      Встановлює status = completed, room.status = cleaning.
+      Очищає needsAction та needsActionReason.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              comment:
+                type: string
+                nullable: true
+                description: Коментар до логу (необов'язковий)
+    responses:
+      "200":
+        description: Stay виселено успішно
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/StayRoomSyncResponse"
+      "400":
+        description: Stay does not require check-out resolution
+      "404":
+        description: Stay not found
+
+stay_resolve_edit_dates:
+  post:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Ops]
+    summary: Оновити дати check-in або check-out
+    description: >
+      Оновлює дати check-in або check-out для stay з needsAction.
+      Очищає needsAction та needsActionReason.
+      Зберігає існуючий статус (booked/occupied).
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              checkIn:
+                type: string
+                format: date
+                description: Нова дата заїзду (YYYY-MM-DD)
+              checkOut:
+                type: string
+                format: date
+                description: Нова дата виїзду (YYYY-MM-DD)
+            description: Хоча б одна дата повинна бути надана
+    responses:
+      "200":
+        description: Дати успішно оновлено
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                stay:
+                  $ref: "../openapi.base.yaml#/components/schemas/Stay"
+      "400":
+        description: Stay does not require date edit resolution або невалідні дати
+      "404":
+        description: Stay not found
+
+stay_resolve_extend_stay:
+  post:
+    security: [{ bearerAuth: [] }]
+    tags: [Stay Ops]
+    summary: Продовжити stay (оновлює checkOut)
+    description: >
+      Продовжує stay з missed_checkout, оновлюючи checkOut на нову дату.
+      Очищає needsAction та needsActionReason.
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [checkOut]
+            properties:
+              checkOut:
+                type: string
+                format: date
+                description: Нова дата виїзду (YYYY-MM-DD), повинна бути пізніше поточної
+    responses:
+      "200":
+        description: Stay успішно продовжено
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                stay:
+                  $ref: "../openapi.base.yaml#/components/schemas/Stay"
+      "400":
+        description: Stay does not require extend resolution або невалідна дата
+      "404":
+        description: Stay not found

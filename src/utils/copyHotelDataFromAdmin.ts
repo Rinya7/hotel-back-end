@@ -15,6 +15,8 @@ export function copyHotelDataFromAdmin(owner: Admin): {
   latitude?: string | null;
   longitude?: string | null;
   logo_url?: string;
+  // Примечание: phoneCountryCode, phoneNumber и email НЕ копируются,
+  // так как это личные данные, которые должны быть уникальными для каждого пользователя
   phoneCountryCode?: string | null;
   phoneNumber?: string | null;
   email?: string;
@@ -34,9 +36,11 @@ export function copyHotelDataFromAdmin(owner: Admin): {
     latitude: owner.latitude ?? null,
     longitude: owner.longitude ?? null,
     logo_url: owner.logo_url ?? undefined,
-    phoneCountryCode: owner.phoneCountryCode ?? null,
-    phoneNumber: owner.phoneNumber ?? null,
-    email: owner.email ?? undefined,
+    // НЕ копируем личные данные (phoneCountryCode, phoneNumber, email)
+    // они должны быть уникальными для каждого пользователя
+    phoneCountryCode: undefined,
+    phoneNumber: undefined,
+    email: undefined,
     // include policy hours so editor "inherits" visible hotel policy
     checkInHour: inHour,
     checkOutHour: outHour,

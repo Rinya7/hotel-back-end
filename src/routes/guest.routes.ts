@@ -30,4 +30,15 @@ router.post(
  */
 router.get("/access/:token", controller.getGuestAccessByToken);
 
+/**
+ * GET /guest/stays/:stayId/tokens
+ * Отримання списку токенів для проживання (тільки admin/editor)
+ */
+router.get(
+  "/stays/:stayId/tokens",
+  authenticateToken,
+  isEditorOrAdmin,
+  controller.getGuestAccessTokens
+);
+
 export default router;

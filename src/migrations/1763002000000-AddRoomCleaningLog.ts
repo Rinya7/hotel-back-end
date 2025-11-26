@@ -46,3 +46,4 @@ export class AddRoomCleaningLog1763002000000 implements MigrationInterface {
 
 
 
+

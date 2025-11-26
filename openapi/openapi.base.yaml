@@ -29,6 +29,8 @@ tags:
     description: Добірки для дашборда (за статусом, заїзди/виїзди сьогодні)
   - name: Audit
     description: Універсальні audit logs для Room та Stay
+  - name: Guest Access
+    description: Гостьовий доступ до інформації про проживання по токену
 
 components:
   securitySchemes:
@@ -209,9 +211,23 @@ components:
         username: { type: string }
         role: { $ref: "#/components/schemas/Role" }
         hotel_name: { type: string, nullable: true }
+        # Детальная структура адреса
+        street: { type: string, nullable: true }
+        buildingNumber: { type: string, nullable: true }
+        apartmentNumber: { type: string, nullable: true }
+        country: { type: string, nullable: true }
+        province: { type: string, nullable: true }
+        postalCode: { type: string, nullable: true }
+        latitude: { type: string, nullable: true }
+        longitude: { type: string, nullable: true }
+        # Для обратной совместимости
         address: { type: string, nullable: true }
         full_name: { type: string, nullable: true }
         logo_url: { type: string, nullable: true }
+        # Телефон разделен на код и номер
+        phoneCountryCode: { type: string, nullable: true }
+        phoneNumber: { type: string, nullable: true }
+        # Для обратной совместимости
         phone: { type: string, nullable: true }
         email: { type: string, nullable: true }
         isBlocked: { type: boolean }
@@ -231,6 +247,10 @@ components:
               username: { type: string }
               role: { $ref: "#/components/schemas/Role" }
               full_name: { type: string, nullable: true }
+              # Телефон разделен на код и номер
+              phoneCountryCode: { type: string, nullable: true }
+              phoneNumber: { type: string, nullable: true }
+              # Для обратной совместимости
               phone: { type: string, nullable: true }
               email: { type: string, nullable: true }
               isBlocked: { type: boolean }
@@ -417,9 +437,15 @@ components:
 
     CreateStayForRoomRequest:
       type: object
-      required: [mainGuestName, checkIn, checkOut]
+      required: [mainGuestName, firstName, lastName, email, phoneCountryCode, phoneNumber, guestsCount, checkIn, checkOut]
       properties:
         mainGuestName: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+        email: { type: string }
+        phoneCountryCode: { type: string }
+        phoneNumber: { type: string }
+        guestsCount: { type: integer, minimum: 1 }
         extraGuestNames:
           type: array
           items: { type: string }
@@ -448,6 +474,207 @@ components:
       required: [status]
       properties:
         status: { type: string, enum: [completed, cancelled] }
+
+    StayNeedsAction:
+      type: object
+      description: Stay, який потребує дії від адміністратора
+      required:
+        - id
+        - roomNumber
+        - mainGuestName
+        - checkIn
+        - checkOut
+        - status
+        - needsAction
+        - needsActionReason
+      properties:
+        id:
+          type: integer
+          description: ID проживання
+        roomNumber:
+          type: string
+          description: Номер кімнати
+        mainGuestName:
+          type: string
+          description: Ім'я основного гостя
+        checkIn:
+          type: string
+          format: date
+          description: Дата заїзду (YYYY-MM-DD)
+        checkOut:
+          type: string
+          format: date
+          description: Дата виїзду (YYYY-MM-DD)
+        status:
+          type: string
+          enum: [booked, occupied]
+          description: Статус проживання (не змінюється)
+        needsAction:
+          type: boolean
+          description: Прапорець потребує дії (завжди true для цього типу)
+          example: true
+        needsActionReason:
+          type: string
+          enum: [missed_checkin, missed_checkout]
+          description: Причина потребує дії
+
+    StayRoomSyncResponse:
+      type: object
+      description: Відповідь з синхронізованими даними Stay та Room
+      required:
+        - message
+        - stay
+        - room
+      properties:
+        message:
+          type: string
+          description: Повідомлення про результат операції
+        stay:
+          $ref: "#/components/schemas/Stay"
+        room:
+          $ref: "#/components/schemas/Room"
+
+    # ==== GUEST ACCESS ====
+    GuestStayStatus:
+      type: string
+      enum: [booked, occupied, completed, cancelled]
+      description: Статус проживання для гостьового доступу
+
+    GuestStayView:
+      type: object
+      description: Інформація про проживання для гостя
+      required:
+        - stayId
+        - roomNumber
+        - stayStatus
+        - checkIn
+        - checkOut
+        - mainGuestName
+        - extraGuestNames
+      properties:
+        stayId:
+          type: integer
+          description: ID проживання
+        hotelName:
+          type: string
+          nullable: true
+          description: Назва готелю
+        hotelAddress:
+          type: string
+          nullable: true
+          description: Адреса готелю
+        roomNumber:
+          type: string
+          description: Номер кімнати
+        stayStatus:
+          $ref: "#/components/schemas/GuestStayStatus"
+        checkIn:
+          type: string
+          format: date
+          description: Дата заїзду (YYYY-MM-DD)
+        checkOut:
+          type: string
+          format: date
+          description: Дата виїзду (YYYY-MM-DD)
+        mainGuestName:
+          type: string
+          description: Ім'я основного гостя
+        extraGuestNames:
+          type: array
+          items:
+            type: string
+          description: Додаткові гості
+        policyCheckInHour:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 23
+          description: Година заїзду з політики готелю
+        policyCheckOutHour:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 23
+          description: Година виїзду з політики готелю
+        wifiName:
+          type: string
+          nullable: true
+          description: Назва Wi-Fi мережі (тільки для статусу occupied)
+        wifiPassword:
+          type: string
+          nullable: true
+          description: Пароль Wi-Fi (тільки для статусу occupied)
+        contactPhone:
+          type: string
+          nullable: true
+          description: Контактний телефон готелю
+        contactEmail:
+          type: string
+          nullable: true
+          description: Контактний email готелю
+
+    GenerateTokenResponse:
+      type: object
+      description: Відповідь при генерації токену доступу
+      required:
+        - message
+        - token
+        - url
+      properties:
+        message:
+          type: string
+          description: Повідомлення про результат
+        token:
+          type: string
+          description: Унікальний токен доступу
+        url:
+          type: string
+          format: uri
+          description: Повний URL для доступу гостя
+
+    GuestAccessErrorResponse:
+      type: object
+      description: Помилка доступу гостя
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Опис помилки
+
+    GuestAccessTokenInfo:
+      type: object
+      description: Інформація про токен доступу гостя
+      required:
+        - id
+        - token
+        - createdAt
+      properties:
+        id:
+          type: integer
+          description: ID токену
+        token:
+          type: string
+          description: Унікальний токен доступу
+        createdAt:
+          type: string
+          format: date-time
+          description: Дата створення токену
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Дата закінчення терміну дії токену (null = безстроково)
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Дата відкликання токену (null = не відкликано)
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Дата останнього використання токену (null = не використовувався)
 
     # ==== POLICY HOURS (BULK) ====
     BulkPolicyHoursRequest:
@@ -486,10 +713,18 @@ paths:
     $ref: "./paths/auth.yaml#/auth_create_editor"
   /auth/users:
     $ref: "./paths/auth.yaml#/auth_users"
+  /auth/profile:
+    $ref: "./paths/auth.yaml#/auth_profile"
   /auth/block/{username}:
     $ref: "./paths/auth.yaml#/auth_block"
   /auth/unblock/{username}:
     $ref: "./paths/auth.yaml#/auth_unblock"
+  /auth/editor/{username}/block:
+    $ref: "./paths/auth.yaml#/auth_block_editor"
+  /auth/editor/{username}/unblock:
+    $ref: "./paths/auth.yaml#/auth_unblock_editor"
+  /auth/editor/{username}:
+    $ref: "./paths/auth.yaml#/auth_update_editor"
   /auth/delete/{username}:
     $ref: "./paths/auth.yaml#/auth_delete"
 
@@ -543,6 +778,22 @@ paths:
   /stays/{id}/status:
     $ref: "./paths/stay-ops.yaml#/stay_update_status"
 
+  # --- Needs Action Endpoints ---
+  /stays/needs-action:
+    $ref: "./paths/stay-ops.yaml#/stays_needs_action"
+  /stays/test-auto-check:
+    $ref: "./paths/stay-ops.yaml#/stays_test_auto_check"
+  /stays/{id}/resolve/no-show:
+    $ref: "./paths/stay-ops.yaml#/stay_resolve_no_show"
+  /stays/{id}/resolve/check-in-now:
+    $ref: "./paths/stay-ops.yaml#/stay_resolve_check_in_now"
+  /stays/{id}/resolve/check-out-now:
+    $ref: "./paths/stay-ops.yaml#/stay_resolve_check_out_now"
+  /stays/{id}/resolve/edit-dates:
+    $ref: "./paths/stay-ops.yaml#/stay_resolve_edit_dates"
+  /stays/{id}/resolve/extend-stay:
+    $ref: "./paths/stay-ops.yaml#/stay_resolve_extend_stay"
+
   # --- Stay Queries ---
   /stays/status/{status}:
     $ref: "./paths/stay-queries.yaml#/stays_by_status"
@@ -560,3 +811,11 @@ paths:
   # --- Audit Logs ---
   /audit/logs:
     $ref: "./paths/audit.yaml#/audit_logs"
+
+  # --- Guest Access ---
+  /guest/stays/{stayId}/link:
+    $ref: "./paths/guest.yaml#/guest_create_link"
+  /guest/stays/{stayId}/tokens:
+    $ref: "./paths/guest.yaml#/guest_get_tokens"
+  /guest/access/{token}:
+    $ref: "./paths/guest.yaml#/guest_access_by_token"

@@ -1,0 +1,217 @@
+# openapi/paths/guest.yaml
+# Guest Access API endpoints
+
+guest_create_link:
+  post:
+    security: [{ bearerAuth: [] }]
+    tags: [Guest Access]
+    summary: Створити або отримати лінк доступу для гостя
+    description: |
+      Генерує унікальний токен та URL для доступу гостя до інформації про проживання.
+      Якщо для цього проживання вже є активний токен, повертає існуючий.
+      Доступ тільки для admin та editor.
+    parameters:
+      - name: stayId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+        description: ID проживання
+    responses:
+      "200":
+        description: Лінк успішно згенеровано
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/GenerateTokenResponse"
+            examples:
+              success:
+                value:
+                  message: "Guest access link generated successfully"
+                  token: "abc123def456ghi789"
+                  url: "http://localhost:5174/access/abc123def456ghi789"
+      "400":
+        description: Невірний stayId
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse"
+      "401":
+        description: Неавторизований
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse"
+      "403":
+        description: Немає прав доступу (тільки admin/editor)
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse"
+      "404":
+        description: Проживання не знайдено
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse"
+      "500":
+        description: Помилка сервера
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse"
+
+guest_access_by_token:
+  get:
+    tags: [Guest Access]
+    summary: Отримати інформацію про проживання по токену
+    description: |
+      Публічний endpoint для доступу гостя до інформації про проживання.
+      Не вимагає авторизації, тільки валідний токен.
+      Wi-Fi інформація показується тільки для статусу "occupied".
+    parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Токен доступу гостя
+    responses:
+      "200":
+        description: Інформація про проживання
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/GuestStayView"
+            examples:
+              booked:
+                value:
+                  stayId: 43
+                  hotelName: "Hotel Example"
+                  hotelAddress: "Via Roma 1, 00100 Rome, Italy"
+                  roomNumber: "101"
+                  stayStatus: "booked"
+                  checkIn: "2025-11-08"
+                  checkOut: "2025-11-10"
+                  mainGuestName: "Max Ingerma"
+                  extraGuestNames: ["Alyona Ingerma"]
+                  policyCheckInHour: 14
+                  policyCheckOutHour: 11
+                  wifiName: null
+                  wifiPassword: null
+                  contactPhone: "+39 06 1234567"
+                  contactEmail: "info@hotel.example.com"
+              occupied:
+                value:
+                  stayId: 43
+                  hotelName: "Hotel Example"
+                  hotelAddress: "Via Roma 1, 00100 Rome, Italy"
+                  roomNumber: "101"
+                  stayStatus: "occupied"
+                  checkIn: "2025-11-08"
+                  checkOut: "2025-11-10"
+                  mainGuestName: "Max Ingerma"
+                  extraGuestNames: ["Alyona Ingerma"]
+                  policyCheckInHour: 14
+                  policyCheckOutHour: 11
+                  wifiName: "Hotel_Guest_WiFi"
+                  wifiPassword: "SecurePass123"
+                  contactPhone: "+39 06 1234567"
+                  contactEmail: "info@hotel.example.com"
+      "400":
+        description: Невірний токен
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/GuestAccessErrorResponse"
+      "404":
+        description: Токен не знайдено
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/GuestAccessErrorResponse"
+      "410":
+        description: Токен прострочений або відкликаний
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/GuestAccessErrorResponse"
+      "500":
+        description: Помилка сервера
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/GuestAccessErrorResponse"
+
+guest_get_tokens:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Guest Access]
+    summary: Отримати список токенів доступу для проживання
+    description: |
+      Повертає список всіх токенів доступу для конкретного проживання.
+      Доступ тільки для admin та editor.
+    parameters:
+      - name: stayId
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+        description: ID проживання
+    responses:
+      "200":
+        description: Список токенів
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: "../openapi.base.yaml#/components/schemas/GuestAccessTokenInfo"
+            examples:
+              success:
+                value:
+                  - id: 1
+                    token: "abc123def456ghi789"
+                    createdAt: "2025-11-08T10:00:00.000Z"
+                    expiresAt: null
+                    revokedAt: null
+                    lastUsedAt: "2025-11-08T12:30:00.000Z"
+                  - id: 2
+                    token: "xyz789uvw456rst123"
+                    createdAt: "2025-11-08T11:00:00.000Z"
+                    expiresAt: null
+                    revokedAt: null
+                    lastUsedAt: null
+      "400":
+        description: Невірний stayId
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse"
+      "401":
+        description: Неавторизований
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse"
+      "403":
+        description: Немає прав доступу (тільки admin/editor)
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse"
+      "404":
+        description: Проживання не знайдено
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse"
+      "500":
+        description: Помилка сервера
+        content:
+          application/json:
+            schema:
+              $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse"
+

@@ -6,22 +6,24 @@
 import { Response } from "express";
 import { AppDataSource } from "../config/data-source";
 import { Room } from "../entities/Room";
+import { Admin } from "../entities/Admin";
 import { AuthRequest } from "../middlewares/authMiddleware";
 import { isHourOrNull } from "../utils/hours";
 import { getOwnerAdminId } from "../utils/owner";
 import { ROLES } from "../auth/roles";
+import { BulkPolicyBody, BulkWiFiBody } from "../types/policy";
 
-/** Request body for bulk set operation (both fields optional, at least one required). */
-interface BulkPolicyBody {
-  checkInHour?: number | null;
-  checkOutHour?: number | null;
-}
+///** Request body for bulk set operation (both fields optional, at least one required). */
+//interface BulkPolicyBody {
+//  checkInHour?: number | null;
+//  checkOutHour?: number | null;
+//}
 
-/** Request body for bulk Wi-Fi update (both fields required). */
-interface BulkWiFiBody {
-  wifiName: string;
-  wifiPassword: string;
-}
+///** Request body for bulk Wi-Fi update (both fields required). */
+//interface BulkWiFiBody {
+//  wifiName: string;
+//  wifiPassword: string;
+//}
 
 /**
  * PUT /rooms/policy-hours/bulk
@@ -72,11 +74,28 @@ export const bulkSetRoomPolicyHours = async (
   if (typeof checkInHour !== "undefined") set.checkInHour = checkInHour;
   if (typeof checkOutHour !== "undefined") set.checkOutHour = checkOutHour;
 
+  // Обновляем все комнаты отеля
   const result = await AppDataSource.createQueryBuilder()
     .update(Room)
     .set(set)
     .where(`"adminId" = :ownerAdminId`, { ownerAdminId })
     .execute();
+
+  // Также обновляем значения по умолчанию в таблице Admin (только для админа, не для редактора)
+  // Это нужно, чтобы при создании новых комнат использовались актуальные значения
+  if (req.user?.role === ROLES.ADMIN) {
+    const adminSet: Partial<Pick<Admin, "checkInHour" | "checkOutHour">> = {};
+    if (typeof checkInHour !== "undefined") adminSet.checkInHour = checkInHour;
+    if (typeof checkOutHour !== "undefined") adminSet.checkOutHour = checkOutHour;
+
+    if (Object.keys(adminSet).length > 0) {
+      await AppDataSource.createQueryBuilder()
+        .update(Admin)
+        .set(adminSet)
+        .where(`id = :ownerAdminId`, { ownerAdminId })
+        .execute();
+    }
+  }
 
   return res.status(200).json({
     ok: true,
@@ -138,6 +157,19 @@ export const bulkSetRoomWiFi = async (req: AuthRequest, res: Response) => {
     })
     .where(`"adminId" = :ownerAdminId`, { ownerAdminId })
     .execute();
+
+  // Также обновляем значения по умолчанию в таблице Admin (только для админа, не для редактора)
+  // Это нужно, чтобы при создании новых комнат использовались актуальные значения
+  if (req.user?.role === ROLES.ADMIN) {
+    await AppDataSource.createQueryBuilder()
+      .update(Admin)
+      .set({
+        defaultWifiName: wifiName.trim(),
+        defaultWifiPassword: wifiPassword.trim(),
+      })
+      .where(`id = :ownerAdminId`, { ownerAdminId })
+      .execute();
+  }
 
   return res.status(200).json({
     message: "Wi-Fi credentials updated successfully",

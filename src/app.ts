@@ -1,5 +1,5 @@
 // src/app.ts
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
@@ -19,7 +19,13 @@ const app = express();
 
 // Безпека/базові мідлвари
 app.use(helmet());
-app.use(cors({ origin: ["http://localhost:5173"], credentials: true }));
+app.use(cors({
+  origin: [
+    "http://localhost:5173", // admin-frontend
+    "http://localhost:5174", // guest-app
+  ],
+  credentials: true,
+}));
 app.use(express.json());
 
 // Rate limits
@@ -57,6 +63,18 @@ const openapiDoc = setupSwagger(app); // це тільки для UI/JSON
  *    але ігнорувати /docs та /docs.json (див. ignorePaths).
  */
 setupOpenApiValidator(app); // валідатор читає файл сам
+
+// Обробка помилок валідації OpenAPI
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (err.status === 400 && err.errors) {
+    console.error("[OpenAPI Validator] Validation error:", JSON.stringify(err.errors, null, 2));
+    return res.status(400).json({
+      message: "Validation error",
+      errors: err.errors,
+    });
+  }
+  next(err);
+});
 
 // ===== Routes (після валідатора) =====
 app.use("/auth", authRoutes);

@@ -36,7 +36,18 @@ export const getRoomStats = async (req: AuthRequest, res: Response) => {
 
 export const getCurrentStays = async (req: AuthRequest, res: Response) => {
   try {
-    const adminId = req.user!.adminId;
+    // Додаткова перевірка для редакторів
+    if (!req.user) {
+      console.error("[getCurrentStays] No user in request");
+      return res.status(401).json({ message: "No token provided" });
+    }
+    if (req.user.role !== "admin" && req.user.role !== "editor") {
+      console.error("[getCurrentStays] Invalid role:", req.user.role);
+      return res.status(403).json({ message: "Access denied" });
+    }
+    
+    const { getOwnerAdminId } = await import("../utils/owner");
+    const adminId = getOwnerAdminId(req);
     const stayRepo = AppDataSource.getRepository(Stay);
 
   const stays = await stayRepo
@@ -50,12 +61,20 @@ export const getCurrentStays = async (req: AuthRequest, res: Response) => {
 
     return res.json(stays);
   } catch (error) {
+    console.error("[getCurrentStays] Error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    // Якщо помилка з getOwnerAdminId - повертаємо 401/403
+    if (errorMessage.includes("No auth user") || errorMessage.includes("Invalid adminId")) {
+      return res.status(401).json({ 
+        message: "Authentication error", 
+        error: errorMessage 
+      });
+    }
     // Логуємо тільки якщо це не очікувана ситуація (порожня база - це нормально)
-    if (error instanceof Error && !error.message.includes("empty")) {
-      console.warn("Помилка при отриманні current stays:", error.message);
+    if (errorMessage.includes("empty")) {
+      return res.json([]);
     }
     // Повертаємо порожній масив (той самий формат, що й при успіху)
-    // Використовуємо 200 замість 500, бо порожня база - це нормальна ситуація
     return res.json([]);
   }
 };
@@ -64,8 +83,25 @@ export const getCurrentStays = async (req: AuthRequest, res: Response) => {
 // POST /rooms/number/:roomNumber/stays
 export const createStayForRoom = async (req: AuthRequest, res: Response) => {
   const { roomNumber } = req.params;
-  const { mainGuestName, extraGuestNames, checkIn, checkOut, balance, status } =
-    req.body;
+  
+  // Логируем что приходит в req.body для отладки
+  console.log("[createStayForRoom] Received body:", JSON.stringify(req.body, null, 2));
+  console.log("[createStayForRoom] firstName type:", typeof req.body?.firstName, "value:", req.body?.firstName);
+  
+  const {
+    mainGuestName,
+    firstName,
+    lastName,
+    email,
+    phoneCountryCode,
+    phoneNumber,
+    guestsCount,
+    extraGuestNames,
+    checkIn,
+    checkOut,
+    balance,
+    status,
+  } = req.body;
 
   const roomRepo = AppDataSource.getRepository(Room);
   const stayRepo = AppDataSource.getRepository(Stay);
@@ -121,14 +157,54 @@ export const createStayForRoom = async (req: AuthRequest, res: Response) => {
     }
   }
 
+  // Валидация обязательных полей (по аналогии с админом)
+  if (!firstName || typeof firstName !== "string" || !firstName.trim()) {
+    return res.status(400).json({ message: "firstName is required" });
+  }
+  if (!lastName || typeof lastName !== "string" || !lastName.trim()) {
+    return res.status(400).json({ message: "lastName is required" });
+  }
+  if (!email || typeof email !== "string" || !email.trim()) {
+    return res.status(400).json({ message: "email is required" });
+  }
+  if (!phoneCountryCode || typeof phoneCountryCode !== "string" || !phoneCountryCode.trim()) {
+    return res.status(400).json({ message: "phoneCountryCode is required" });
+  }
+  if (!phoneNumber || typeof phoneNumber !== "string" || !phoneNumber.trim()) {
+    return res.status(400).json({ message: "phoneNumber is required" });
+  }
+  if (!guestsCount || (typeof guestsCount !== "number" && typeof guestsCount !== "string") || Number(guestsCount) < 1) {
+    return res.status(400).json({ message: "guestsCount is required and must be at least 1" });
+  }
+
   const normalizedExtraGuests =
     Array.isArray(extraGuestNames) && extraGuestNames.length > 0
       ? extraGuestNames
       : [];
 
+  // Нормализуем guestsCount: преобразуем в число (обязательное поле)
+  const normalizedGuestsCount = Number(guestsCount);
+  if (Number.isNaN(normalizedGuestsCount) || normalizedGuestsCount < 1) {
+    return res.status(400).json({ message: "guestsCount must be a positive number" });
+  }
+
+  // Нормализуем обязательные поля (по аналогии с админом) - обрезаем пробелы
+  // Эти поля уже проверены на валидность выше, поэтому они точно не пустые
+  const normalizedFirstName = (firstName as string).trim();
+  const normalizedLastName = (lastName as string).trim();
+  const normalizedEmail = (email as string).trim();
+  const normalizedPhoneCountryCode = (phoneCountryCode as string).trim();
+  const normalizedPhoneNumber = (phoneNumber as string).trim();
+
   const stay = stayRepo.create({
     room,
     mainGuestName,
+    firstName: normalizedFirstName,
+    lastName: normalizedLastName,
+    email: normalizedEmail,
+    phoneCountryCode: normalizedPhoneCountryCode,
+    phoneNumber: normalizedPhoneNumber,
+    guestsCount: normalizedGuestsCount,
     extraGuestNames: normalizedExtraGuests,
     checkIn,
     checkOut,
@@ -139,7 +215,7 @@ export const createStayForRoom = async (req: AuthRequest, res: Response) => {
     updatedByRole: userRole,
   });
 
-  await stayRepo.save(stay);
+  const saved = await stayRepo.save(stay);
 
   const creationLog = stayLogRepo.create({
     stay,
@@ -165,7 +241,7 @@ export const createStayForRoom = async (req: AuthRequest, res: Response) => {
 
   res.status(201).json({
     message: `Stay for room ${roomNumber} created successfully`,
-    stay,
+    stay: saved, // Возвращаем сохраненный stay с данными из БД
   });
 };
 
@@ -299,20 +375,48 @@ export const closeStay = async (req: AuthRequest, res: Response) => {
 //Історія по конкретній кімнаті
 // GET /rooms/number/:roomNumber/stays
 export const getStaysForRoom = async (req: AuthRequest, res: Response) => {
-  const { roomNumber } = req.params;
-  const { from, to } = req.query as { from?: string; to?: string };
+  try {
+    // Додаткова перевірка для редакторів
+    if (!req.user) {
+      console.error("[getStaysForRoom] No user in request");
+      return res.status(401).json({ message: "No token provided" });
+    }
+    if (req.user.role !== "admin" && req.user.role !== "editor") {
+      console.error("[getStaysForRoom] Invalid role:", req.user.role);
+      return res.status(403).json({ message: "Access denied" });
+    }
+    
+    const { getOwnerAdminId } = await import("../utils/owner");
+    const adminId = getOwnerAdminId(req);
+    const { roomNumber } = req.params;
+    const { from, to } = req.query as { from?: string; to?: string };
 
-  const qb = AppDataSource.getRepository(Stay)
-    .createQueryBuilder("s")
-    .leftJoinAndSelect("s.room", "r")
-    .where("r.adminId = :adminId", { adminId: req.user!.adminId })
-    .andWhere("r.roomNumber = :roomNumber", { roomNumber })
-    .orderBy("s.checkIn", "DESC");
+    const qb = AppDataSource.getRepository(Stay)
+      .createQueryBuilder("s")
+      .leftJoinAndSelect("s.room", "r")
+      .where("r.adminId = :adminId", { adminId })
+      .andWhere("r.roomNumber = :roomNumber", { roomNumber })
+      .orderBy("s.checkIn", "DESC");
 
   if (from && to) {
     qb.andWhere("s.checkIn >= :from AND s.checkOut <= :to", { from, to });
   }
 
-  const stays = await qb.leftJoinAndSelect("s.guests", "g").getMany();
-  res.json(stays);
+    const stays = await qb.leftJoinAndSelect("s.guests", "g").getMany();
+    return res.json(stays);
+  } catch (error) {
+    console.error("[getStaysForRoom] Error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    // Якщо помилка з getOwnerAdminId - повертаємо 401/403
+    if (errorMessage.includes("No auth user") || errorMessage.includes("Invalid adminId")) {
+      return res.status(401).json({ 
+        message: "Authentication error", 
+        error: errorMessage 
+      });
+    }
+    return res.status(500).json({ 
+      message: "Помилка при отриманні проживань",
+      error: errorMessage 
+    });
+  }
 };

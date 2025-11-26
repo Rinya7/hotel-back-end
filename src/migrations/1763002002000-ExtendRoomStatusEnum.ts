@@ -26,3 +26,4 @@ export class ExtendRoomStatusEnum1763002002000 implements MigrationInterface {
 
 
 
+

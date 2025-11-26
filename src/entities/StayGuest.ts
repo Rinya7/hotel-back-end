@@ -16,8 +16,20 @@ export class StayGuest {
   @ManyToOne(() => Stay, (stay) => stay.guests, { onDelete: "CASCADE" })
   stay!: Stay;
 
-  @Column({ type: "varchar", length: 150 })
-  fullName!: string;
+  @Column({ type: "varchar", length: 100 })
+  firstName!: string;
+
+  @Column({ type: "varchar", length: 100 })
+  lastName!: string;
+
+  @Column({ type: "varchar", length: 150, nullable: true })
+  email?: string | null;
+
+  @Column({ type: "varchar", length: 10, nullable: true })
+  phoneCountryCode?: string | null; // Код страны (например, +39, +380)
+
+  @Column({ type: "varchar", length: 50, nullable: true })
+  phoneNumber?: string | null; // Номер телефона без кода страны
 
   @Column({ type: "varchar", length: 50, nullable: true })
   documentType?: string | null;
@@ -37,6 +49,7 @@ export class StayGuest {
   @UpdateDateColumn()
   updatedAt!: Date;
 }
+
 
 
 

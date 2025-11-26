@@ -255,11 +255,18 @@ export const checkInStay = async (req: AuthRequest, res: Response) => {
   const payload = (req.body ?? {}) as {
     comment?: string;
     guests?: Array<{
-      fullName?: string;
+      firstName?: string;
+      lastName?: string;
+      email?: string | null;
+      phoneCountryCode?: string | null;
+      phoneNumber?: string | null;
       documentType?: string | null;
       documentNumber?: string | null;
       birthDate?: string | null;
       notes?: string | null;
+      // Підтримка старого формату fullName та phone для сумісності
+      fullName?: string;
+      phone?: string | null;
     }>;
   };
 
@@ -269,17 +276,50 @@ export const checkInStay = async (req: AuthRequest, res: Response) => {
     : [];
 
   const normalizedGuests = guestsPayload
-    .map((guest) => ({
-      fullName: guest.fullName?.toString().trim() ?? "",
-      documentType: guest.documentType?.toString().trim() || null,
-      documentNumber: guest.documentNumber?.toString().trim() || null,
-      birthDate:
-        guest.birthDate && !Number.isNaN(Date.parse(guest.birthDate))
-          ? new Date(guest.birthDate)
-          : null,
-      notes: guest.notes?.toString().trim() || null,
-    }))
-    .filter((guest) => guest.fullName.length > 0);
+    .map((guest) => {
+      // Підтримка старого формату: якщо є fullName, розділяємо його
+      let firstName = guest.firstName?.toString().trim() ?? "";
+      let lastName = guest.lastName?.toString().trim() ?? "";
+      
+      if ((!firstName || !lastName) && guest.fullName) {
+        const fullNameParts = guest.fullName.toString().trim().split(/\s+/);
+        if (fullNameParts.length > 0) {
+          firstName = firstName || fullNameParts[0];
+          lastName = lastName || fullNameParts.slice(1).join(" ") || fullNameParts[0];
+        }
+      }
+
+      // Підтримка старого формату phone: якщо є phone, розділяємо його на код і номер
+      let phoneCountryCode = guest.phoneCountryCode?.toString().trim() || null;
+      let phoneNumber = guest.phoneNumber?.toString().trim() || null;
+      
+      if (!phoneCountryCode && !phoneNumber && guest.phone) {
+        const phoneStr = guest.phone.toString().trim();
+        const phoneMatch = phoneStr.match(/^(\+\d{1,4})\s*(.+)$/);
+        if (phoneMatch) {
+          phoneCountryCode = phoneMatch[1];
+          phoneNumber = phoneMatch[2];
+        } else {
+          phoneNumber = phoneStr;
+        }
+      }
+
+      return {
+        firstName,
+        lastName,
+        email: guest.email?.toString().trim() || null,
+        phoneCountryCode,
+        phoneNumber,
+        documentType: guest.documentType?.toString().trim() || null,
+        documentNumber: guest.documentNumber?.toString().trim() || null,
+        birthDate:
+          guest.birthDate && !Number.isNaN(Date.parse(guest.birthDate))
+            ? new Date(guest.birthDate)
+            : null,
+        notes: guest.notes?.toString().trim() || null,
+      };
+    })
+    .filter((guest) => guest.firstName.length > 0 || guest.lastName.length > 0);
 
   if (normalizedGuests.length === 0) {
     return res.status(400).json({
@@ -296,17 +336,23 @@ export const checkInStay = async (req: AuthRequest, res: Response) => {
 
   await guestRepo.delete({ stay: { id: stay.id } });
 
-  stay.mainGuestName = normalizedGuests[0].fullName;
+  // Формуємо mainGuestName з firstName та lastName
+  const mainGuest = normalizedGuests[0];
+  stay.mainGuestName = `${mainGuest.firstName} ${mainGuest.lastName}`.trim() || mainGuest.firstName || mainGuest.lastName;
   stay.extraGuestNames = normalizedGuests
     .slice(1)
-    .map((guest) => guest.fullName);
+    .map((guest) => `${guest.firstName} ${guest.lastName}`.trim() || guest.firstName || guest.lastName);
   stay.guests = [];
   await stayRepo.save(stay);
 
   const guestEntities = normalizedGuests.map((guest) =>
     guestRepo.create({
       stay,
-      fullName: guest.fullName,
+      firstName: guest.firstName,
+      lastName: guest.lastName,
+      email: guest.email,
+      phoneCountryCode: guest.phoneCountryCode,
+      phoneNumber: guest.phoneNumber,
       documentType: guest.documentType,
       documentNumber: guest.documentNumber,
       birthDate: guest.birthDate,
@@ -470,5 +516,343 @@ export const updateStayStatus = async (req: AuthRequest, res: Response) => {
     stay: stayWithSortedLogs,
     room,
     logs: recentLogs,
+  });
+};
+
+/**
+ * GET /stays/needs-action
+ * Повертає список stays, які потребують дії (needsAction = true).
+ * Використовується для відображення просрочених check-in/check-out.
+ */
+export const getNeedsActionStays = async (req: AuthRequest, res: Response) => {
+  try {
+    // Додаткова перевірка для редакторів
+    if (!req.user) {
+      return res.status(401).json({ message: "No token provided" });
+    }
+    if (req.user.role !== "admin" && req.user.role !== "editor") {
+      return res.status(403).json({ message: "Access denied" });
+    }
+    
+    const ownerAdminId = getOwnerAdminId(req);
+    console.log("[getNeedsActionStays] Fetching stays for adminId:", ownerAdminId, "role:", req.user.role);
+
+    const stays = await AppDataSource.getRepository(Stay).find({
+      where: {
+        needsAction: true,
+        room: { admin: { id: ownerAdminId } },
+      },
+      relations: ["room"],
+      order: { checkIn: "ASC", id: "ASC" },
+    });
+
+    console.log("[getNeedsActionStays] Found", stays.length, "stays requiring action");
+
+  const items = stays.map((s) => {
+    // Конвертуємо дати в формат YYYY-MM-DD для OpenAPI схеми
+    const checkInDate = s.checkIn instanceof Date 
+      ? s.checkIn.toISOString().split("T")[0] 
+      : s.checkIn;
+    const checkOutDate = s.checkOut instanceof Date 
+      ? s.checkOut.toISOString().split("T")[0] 
+      : s.checkOut;
+
+    return {
+      id: s.id,
+      roomNumber: s.room.roomNumber,
+      mainGuestName: s.mainGuestName,
+      checkIn: checkInDate,
+      checkOut: checkOutDate,
+      status: s.status, // "booked" | "occupied" - не змінюється
+      needsAction: s.needsAction,
+      needsActionReason: s.needsActionReason, // "missed_checkin" | "missed_checkout"
+    };
+  });
+
+    return res.json({ count: items.length, items });
+  } catch (error) {
+    console.error("[getNeedsActionStays] Error:", error);
+    return res.status(500).json({
+      message: "Failed to fetch stays requiring action",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+};
+
+/**
+ * POST /stays/test-auto-check
+ * Тестовий endpoint для ручного запуску перевірки просрочених stays.
+ * Використовується для тестування логіки needsAction без очікування cron job.
+ */
+export const testAutoCheck = async (req: AuthRequest, res: Response) => {
+  try {
+    const { StayAutoCheckService } = await import(
+      "../services/cron/stayAutoCheck.service"
+    );
+    const service = new StayAutoCheckService();
+    const stats = await service.checkOverdueStays();
+    return res.json({
+      message: "Auto-check completed successfully",
+      stats,
+    });
+  } catch (error) {
+    console.error("[testAutoCheck] Error:", error);
+    return res.status(500).json({
+      message: "Failed to run auto-check",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+};
+
+/**
+ * POST /stays/:id/resolve/no-show
+ * Скасовує stay (зміна статусу на cancelled).
+ * Очищає needsAction та needsActionReason.
+ * Логує зміну статусу.
+ */
+export const resolveNoShow = async (req: AuthRequest, res: Response) => {
+  const ownerAdminId = getOwnerAdminId(req);
+  const stayId = Number(req.params.id);
+  const actor = await resolveActor(req);
+  const { comment } = (req.body ?? {}) as { comment?: string };
+
+  const stay = await loadStayWithRoom(stayId, ownerAdminId);
+  if (!stay) {
+    return res.status(404).json({ message: "Stay not found" });
+  }
+
+  if (!stay.needsAction || stay.needsActionReason !== "missed_checkin") {
+    return res.status(400).json({
+      message: "Stay does not require no-show resolution",
+    });
+  }
+
+  // Встановлюємо статус cancelled
+  const result = await persistStayStatusChange(stay, {
+    nextStatus: "cancelled",
+    actor,
+    comment: comment ?? "Cancelled: guest did not arrive",
+    roomDirective: "skip",
+  });
+
+  // Очищаємо needsAction
+  stay.needsAction = false;
+  stay.needsActionReason = null;
+  await AppDataSource.getRepository(Stay).save(stay);
+
+  const updatedRoom = await updateRoomStatus(result.room.id, actor, {
+    comment: comment ?? null,
+  });
+
+  return res.json({
+    message: "Stay cancelled successfully",
+    stay: sortStayLogs(result.stay),
+    room: updatedRoom ?? result.room,
+  });
+};
+
+/**
+ * POST /stays/:id/resolve/check-in-now
+ * Виконує check-in зараз (occupied).
+ * Встановлює checkIn = today.
+ * Оновлює room.status = "occupied".
+ * Очищає needsAction.
+ */
+export const resolveCheckInNow = async (req: AuthRequest, res: Response) => {
+  const ownerAdminId = getOwnerAdminId(req);
+  const stayId = Number(req.params.id);
+  const actor = await resolveActor(req);
+  const { comment } = (req.body ?? {}) as { comment?: string };
+
+  const stay = await loadStayWithRoom(stayId, ownerAdminId);
+  if (!stay) {
+    return res.status(404).json({ message: "Stay not found" });
+  }
+
+  if (!stay.needsAction || stay.needsActionReason !== "missed_checkin") {
+    return res.status(400).json({
+      message: "Stay does not require check-in resolution",
+    });
+  }
+
+  // Встановлюємо checkIn = today
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  stay.checkIn = today;
+  await AppDataSource.getRepository(Stay).save(stay);
+
+  // Встановлюємо статус occupied
+  const result = await persistStayStatusChange(stay, {
+    nextStatus: "occupied",
+    actor,
+    comment: comment ?? "Check-in performed manually after missed check-in date",
+    roomDirective: "auto", // room.status = "occupied"
+  });
+
+  // Очищаємо needsAction
+  stay.needsAction = false;
+  stay.needsActionReason = null;
+  await AppDataSource.getRepository(Stay).save(stay);
+
+  return res.json({
+    message: "Stay checked in successfully",
+    stay: sortStayLogs(result.stay),
+    room: result.room,
+  });
+};
+
+/**
+ * POST /stays/:id/resolve/check-out-now
+ * Виконує check-out зараз (completed).
+ * Оновлює room.status = "free".
+ * Створює cleaning log (якщо потрібно).
+ * Очищає needsAction.
+ */
+export const resolveCheckOutNow = async (req: AuthRequest, res: Response) => {
+  const ownerAdminId = getOwnerAdminId(req);
+  const stayId = Number(req.params.id);
+  const actor = await resolveActor(req);
+  const { comment } = (req.body ?? {}) as { comment?: string };
+
+  const stay = await loadStayWithRoom(stayId, ownerAdminId);
+  if (!stay) {
+    return res.status(404).json({ message: "Stay not found" });
+  }
+
+  if (!stay.needsAction || stay.needsActionReason !== "missed_checkout") {
+    return res.status(400).json({
+      message: "Stay does not require check-out resolution",
+    });
+  }
+
+  // Встановлюємо статус completed
+  const result = await persistStayStatusChange(stay, {
+    nextStatus: "completed",
+    actor,
+    comment: comment ?? "Check-out performed manually after missed check-out date",
+    roomDirective: "auto", // room.status = "cleaning"
+  });
+
+  // Очищаємо needsAction
+  stay.needsAction = false;
+  stay.needsActionReason = null;
+  await AppDataSource.getRepository(Stay).save(stay);
+
+  return res.json({
+    message: "Stay checked out successfully",
+    stay: sortStayLogs(result.stay),
+    room: result.room,
+  });
+};
+
+/**
+ * POST /stays/:id/resolve/edit-dates
+ * Оновлює дати check-in або check-out.
+ * Очищає needsAction.
+ * Зберігає існуючий статус (booked/occupied).
+ */
+export const resolveEditDates = async (req: AuthRequest, res: Response) => {
+  const ownerAdminId = getOwnerAdminId(req);
+  const stayId = Number(req.params.id);
+  const { checkIn, checkOut } = req.body as {
+    checkIn?: string;
+    checkOut?: string;
+  };
+
+  const stay = await loadStayWithRoom(stayId, ownerAdminId);
+  if (!stay) {
+    return res.status(404).json({ message: "Stay not found" });
+  }
+
+  if (!stay.needsAction) {
+    return res.status(400).json({
+      message: "Stay does not require date edit resolution",
+    });
+  }
+
+  // Оновлюємо дати якщо надані
+  if (checkIn) {
+    const checkInDate = new Date(checkIn);
+    checkInDate.setHours(0, 0, 0, 0);
+    stay.checkIn = checkInDate;
+  }
+
+  if (checkOut) {
+    const checkOutDate = new Date(checkOut);
+    checkOutDate.setHours(0, 0, 0, 0);
+    stay.checkOut = checkOutDate;
+  }
+
+  // Очищаємо needsAction
+  stay.needsAction = false;
+  stay.needsActionReason = null;
+
+  await AppDataSource.getRepository(Stay).save(stay);
+
+  // Оновлюємо stay з relations для відповіді
+  const updatedStay = await AppDataSource.getRepository(Stay).findOne({
+    where: { id: stay.id },
+    relations: ["room", "statusLogs", "guests"],
+  });
+
+  if (!updatedStay) {
+    return res.status(500).json({ message: "Failed to refresh stay" });
+  }
+
+  return res.json({
+    message: "Stay dates updated successfully",
+    stay: sortStayLogs(updatedStay),
+  });
+};
+
+/**
+ * POST /stays/:id/resolve/extend-stay
+ * Продовжує stay (оновлює checkOut).
+ * Очищає needsAction.
+ */
+export const resolveExtendStay = async (req: AuthRequest, res: Response) => {
+  const ownerAdminId = getOwnerAdminId(req);
+  const stayId = Number(req.params.id);
+  const { checkOut } = req.body as { checkOut: string };
+
+  if (!checkOut) {
+    return res.status(400).json({ message: "checkOut is required" });
+  }
+
+  const stay = await loadStayWithRoom(stayId, ownerAdminId);
+  if (!stay) {
+    return res.status(404).json({ message: "Stay not found" });
+  }
+
+  if (!stay.needsAction || stay.needsActionReason !== "missed_checkout") {
+    return res.status(400).json({
+      message: "Stay does not require extend resolution",
+    });
+  }
+
+  // Оновлюємо checkOut
+  const checkOutDate = new Date(checkOut);
+  checkOutDate.setHours(0, 0, 0, 0);
+  stay.checkOut = checkOutDate;
+
+  // Очищаємо needsAction
+  stay.needsAction = false;
+  stay.needsActionReason = null;
+
+  await AppDataSource.getRepository(Stay).save(stay);
+
+  // Оновлюємо stay з relations для відповіді
+  const updatedStay = await AppDataSource.getRepository(Stay).findOne({
+    where: { id: stay.id },
+    relations: ["room", "statusLogs", "guests"],
+  });
+
+  if (!updatedStay) {
+    return res.status(500).json({ message: "Failed to refresh stay" });
+  }
+
+  return res.json({
+    message: "Stay extended successfully",
+    stay: sortStayLogs(updatedStay),
   });
 };

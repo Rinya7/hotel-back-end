@@ -192,6 +192,9 @@ npm run openapi:lint
 - `GET /stays/today/arrivals` — сьогоднішні заїзди
 - `GET /stays/today/departures` — сьогоднішні виїзди
 
+### Аудит
+- `GET /audit/logs` — об'єднані логи змін статусів кімнат та проживань (admin, editor)
+
 ## 🐛 Часті проблеми
 
 ### "password authentication failed"

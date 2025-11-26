@@ -12,6 +12,10 @@ import {
   startStatusScheduler,
   stopStatusScheduler,
 } from "./jobs/statusScheduler";
+import {
+  startStayAutoCheckScheduler,
+  stopStayAutoCheckScheduler,
+} from "./jobs/stayAutoCheckScheduler";
 
 // Port must be a number. Fallback to 3000.
 const PORT: number = Number(process.env.PORT ?? 3000);
@@ -53,6 +57,9 @@ async function bootstrap(): Promise<void> {
     if (START_SCHEDULER) {
       startStatusScheduler(); // should be idempotent
       console.log("⏱️  Status scheduler started");
+      
+      startStayAutoCheckScheduler(); // автоматична перевірка просрочених stays
+      console.log("⏱️  Stay auto-check scheduler started");
     } else {
       console.log("⏭️  START_SCHEDULER=false — scheduler not started");
     }
@@ -71,6 +78,9 @@ async function bootstrap(): Promise<void> {
         try {
           stopStatusScheduler(); // make sure jobs are halted
           console.log("⏹️  Status scheduler stopped");
+          
+          stopStayAutoCheckScheduler();
+          console.log("⏹️  Stay auto-check scheduler stopped");
         } catch (e) {
           console.warn("⚠️  Failed to stop scheduler (non-critical):", e);
         }

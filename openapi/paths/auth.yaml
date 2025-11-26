@@ -137,6 +137,44 @@ auth_users:
       "403":
         description: Forbidden
 
+auth_profile:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Auth]
+    summary: Получить информацию о текущем админе (профиль + редакторы)
+    description: >
+      Для админа возвращает полную информацию об админе и его редакторах.
+      Для суперадмина возвращает список всех админов с редакторами.
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - { $ref: "../openapi.base.yaml#/components/schemas/PublicAdminUser" }
+                - type: array
+                  items:
+                    { $ref: "../openapi.base.yaml#/components/schemas/PublicAdminUser" }
+      "403":
+        description: Forbidden
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse" }
+      "404":
+        description: Not found
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse" }
+      "500":
+        description: Internal server error
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/ErrorResponse" }
+
 auth_block:
   put:
     security: [{ bearerAuth: [] }]
@@ -174,6 +212,133 @@ auth_unblock:
           application/json:
             schema:
               { $ref: "../openapi.base.yaml#/components/schemas/SimpleMessage" }
+      "404":
+        description: Not found
+
+auth_block_editor:
+  put:
+    security: [{ bearerAuth: [] }]
+    tags: [Auth]
+    summary: Заблокувати редактора (admin only, тільки своїх редакторів)
+    parameters:
+      - name: username
+        in: path
+        required: true
+        schema: { type: string }
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/SimpleMessage" }
+      "403":
+        description: Forbidden
+      "404":
+        description: Not found
+
+auth_unblock_editor:
+  put:
+    security: [{ bearerAuth: [] }]
+    tags: [Auth]
+    summary: Розблокувати редактора (admin only, тільки своїх редакторів)
+    parameters:
+      - name: username
+        in: path
+        required: true
+        schema: { type: string }
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/SimpleMessage" }
+      "403":
+        description: Forbidden
+      "404":
+        description: Not found
+
+auth_update_editor:
+  put:
+    security: [{ bearerAuth: [] }]
+    tags: [Auth]
+    summary: Оновити дані редактора (admin only, тільки своїх редакторів)
+    description: >
+      Адмін може редагувати тільки своїх редакторів.
+      Не можна змінювати: username, password, role.
+    parameters:
+      - name: username
+        in: path
+        required: true
+        schema: { type: string }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              full_name:
+                type: string
+                nullable: true
+              email:
+                type: string
+                nullable: true
+              phoneCountryCode:
+                type: string
+                nullable: true
+              phoneNumber:
+                type: string
+                nullable: true
+              phone:
+                type: string
+                nullable: true
+                description: Для обратной совместимости
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                editor:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    username:
+                      type: string
+                    role:
+                      type: string
+                    full_name:
+                      type: string
+                      nullable: true
+                    phoneCountryCode:
+                      type: string
+                      nullable: true
+                    phoneNumber:
+                      type: string
+                      nullable: true
+                    phone:
+                      type: string
+                      nullable: true
+                    email:
+                      type: string
+                      nullable: true
+                    isBlocked:
+                      type: boolean
+                    createdAt:
+                      type: string
+                      format: date-time
+                    updatedAt:
+                      type: string
+                      format: date-time
+      "403":
+        description: Forbidden
       "404":
         description: Not found
 

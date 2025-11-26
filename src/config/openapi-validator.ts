@@ -9,8 +9,11 @@ export function setupOpenApiValidator(app: Express): void {
 
   app.use(
     openApiValidator({
-      apiSpec: apiSpecPath, // <-- рядок, не об’єкт
-      validateRequests: true,
+      apiSpec: apiSpecPath, // <-- рядок, не об'єкт
+      validateRequests: {
+        allowUnknownQueryParameters: true, // Дозволяємо невідомі query параметри
+        removeAdditional: false, // НЕ видаляємо додаткові поля (тимчасово для дебагу)
+      },
       validateResponses: false, // вмикай true, коли схеми будуть вирівняні
       ignorePaths: /\/docs(\.json)?|\/docs\/?.*/,
     })

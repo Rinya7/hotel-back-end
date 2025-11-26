@@ -65,6 +65,24 @@ rooms_by_status:
         description: OK
 
 rooms_update_delete:
+  get:
+    security: [{ bearerAuth: [] }]
+    tags: [Rooms]
+    summary: Отримати кімнату за roomNumber
+    parameters:
+      - name: roomNumber
+        in: path
+        required: true
+        schema: { type: string }
+    responses:
+      "200":
+        description: OK
+        content:
+          application/json:
+            schema:
+              { $ref: "../openapi.base.yaml#/components/schemas/Room" }
+      "404":
+        description: Not found
   put:
     security: [{ bearerAuth: [] }]
     tags: [Rooms]

@@ -26,6 +26,8 @@ tags:
     description: 'Добірки для дашборда (за статусом, заїзди/виїзди сьогодні)'
   - name: Audit
     description: Універсальні audit logs для Room та Stay
+  - name: Guest Access
+    description: Гостьовий доступ до інформації про проживання по токену
 components:
   securitySchemes:
     bearerAuth:
@@ -376,6 +378,30 @@ components:
         hotel_name:
           type: string
           nullable: true
+        street:
+          type: string
+          nullable: true
+        buildingNumber:
+          type: string
+          nullable: true
+        apartmentNumber:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        province:
+          type: string
+          nullable: true
+        postalCode:
+          type: string
+          nullable: true
+        latitude:
+          type: string
+          nullable: true
+        longitude:
+          type: string
+          nullable: true
         address:
           type: string
           nullable: true
@@ -383,6 +409,12 @@ components:
           type: string
           nullable: true
         logo_url:
+          type: string
+          nullable: true
+        phoneCountryCode:
+          type: string
+          nullable: true
+        phoneNumber:
           type: string
           nullable: true
         phone:
@@ -425,6 +457,12 @@ components:
               role:
                 $ref: '#/components/schemas/Role'
               full_name:
+                type: string
+                nullable: true
+              phoneCountryCode:
+                type: string
+                nullable: true
+              phoneNumber:
                 type: string
                 nullable: true
               phone:
@@ -755,11 +793,30 @@ components:
       type: object
       required:
         - mainGuestName
+        - firstName
+        - lastName
+        - email
+        - phoneCountryCode
+        - phoneNumber
+        - guestsCount
         - checkIn
         - checkOut
       properties:
         mainGuestName:
           type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        phoneCountryCode:
+          type: string
+        phoneNumber:
+          type: string
+        guestsCount:
+          type: integer
+          minimum: 1
         extraGuestNames:
           type: array
           items:
@@ -808,6 +865,207 @@ components:
           enum:
             - completed
             - cancelled
+    StayNeedsAction:
+      type: object
+      description: 'Stay, який потребує дії від адміністратора'
+      required:
+        - id
+        - roomNumber
+        - mainGuestName
+        - checkIn
+        - checkOut
+        - status
+        - needsAction
+        - needsActionReason
+      properties:
+        id:
+          type: integer
+          description: ID проживання
+        roomNumber:
+          type: string
+          description: Номер кімнати
+        mainGuestName:
+          type: string
+          description: Ім'я основного гостя
+        checkIn:
+          type: string
+          format: date
+          description: Дата заїзду (YYYY-MM-DD)
+        checkOut:
+          type: string
+          format: date
+          description: Дата виїзду (YYYY-MM-DD)
+        status:
+          type: string
+          enum:
+            - booked
+            - occupied
+          description: Статус проживання (не змінюється)
+        needsAction:
+          type: boolean
+          description: Прапорець потребує дії (завжди true для цього типу)
+          example: true
+        needsActionReason:
+          type: string
+          enum:
+            - missed_checkin
+            - missed_checkout
+          description: Причина потребує дії
+    StayRoomSyncResponse:
+      type: object
+      description: Відповідь з синхронізованими даними Stay та Room
+      required:
+        - message
+        - stay
+        - room
+      properties:
+        message:
+          type: string
+          description: Повідомлення про результат операції
+        stay:
+          $ref: '#/components/schemas/Stay'
+        room:
+          $ref: '#/components/schemas/Room'
+    GuestStayStatus:
+      type: string
+      enum:
+        - booked
+        - occupied
+        - completed
+        - cancelled
+      description: Статус проживання для гостьового доступу
+    GuestStayView:
+      type: object
+      description: Інформація про проживання для гостя
+      required:
+        - stayId
+        - roomNumber
+        - stayStatus
+        - checkIn
+        - checkOut
+        - mainGuestName
+        - extraGuestNames
+      properties:
+        stayId:
+          type: integer
+          description: ID проживання
+        hotelName:
+          type: string
+          nullable: true
+          description: Назва готелю
+        hotelAddress:
+          type: string
+          nullable: true
+          description: Адреса готелю
+        roomNumber:
+          type: string
+          description: Номер кімнати
+        stayStatus:
+          $ref: '#/components/schemas/GuestStayStatus'
+        checkIn:
+          type: string
+          format: date
+          description: Дата заїзду (YYYY-MM-DD)
+        checkOut:
+          type: string
+          format: date
+          description: Дата виїзду (YYYY-MM-DD)
+        mainGuestName:
+          type: string
+          description: Ім'я основного гостя
+        extraGuestNames:
+          type: array
+          items:
+            type: string
+          description: Додаткові гості
+        policyCheckInHour:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 23
+          description: Година заїзду з політики готелю
+        policyCheckOutHour:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 23
+          description: Година виїзду з політики готелю
+        wifiName:
+          type: string
+          nullable: true
+          description: Назва Wi-Fi мережі (тільки для статусу occupied)
+        wifiPassword:
+          type: string
+          nullable: true
+          description: Пароль Wi-Fi (тільки для статусу occupied)
+        contactPhone:
+          type: string
+          nullable: true
+          description: Контактний телефон готелю
+        contactEmail:
+          type: string
+          nullable: true
+          description: Контактний email готелю
+    GenerateTokenResponse:
+      type: object
+      description: Відповідь при генерації токену доступу
+      required:
+        - message
+        - token
+        - url
+      properties:
+        message:
+          type: string
+          description: Повідомлення про результат
+        token:
+          type: string
+          description: Унікальний токен доступу
+        url:
+          type: string
+          format: uri
+          description: Повний URL для доступу гостя
+    GuestAccessErrorResponse:
+      type: object
+      description: Помилка доступу гостя
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Опис помилки
+    GuestAccessTokenInfo:
+      type: object
+      description: Інформація про токен доступу гостя
+      required:
+        - id
+        - token
+        - createdAt
+      properties:
+        id:
+          type: integer
+          description: ID токену
+        token:
+          type: string
+          description: Унікальний токен доступу
+        createdAt:
+          type: string
+          format: date-time
+          description: Дата створення токену
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Дата закінчення терміну дії токену (null = безстроково)
+        revokedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Дата відкликання токену (null = не відкликано)
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Дата останнього використання токену (null = не використовувався)
     BulkPolicyHoursRequest:
       type: object
       description: Передай хоча б одне поле; null означає «слідувати дефолтам готелю».
@@ -975,6 +1233,44 @@ paths:
           description: OK
         '403':
           description: Forbidden
+  /auth/profile:
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Auth
+      summary: Получить информацию о текущем админе (профиль + редакторы)
+      description: |
+        Для админа возвращает полную информацию об админе и его редакторах. Для суперадмина возвращает список всех админов с редакторами.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/PublicAdminUser'
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/PublicAdminUser'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   '/auth/block/{username}':
     put:
       security:
@@ -1017,6 +1313,138 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SimpleMessage'
+        '404':
+          description: Not found
+  '/auth/editor/{username}/block':
+    put:
+      security:
+        - bearerAuth: []
+      tags:
+        - Auth
+      summary: 'Заблокувати редактора (admin only, тільки своїх редакторів)'
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleMessage'
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+  '/auth/editor/{username}/unblock':
+    put:
+      security:
+        - bearerAuth: []
+      tags:
+        - Auth
+      summary: 'Розблокувати редактора (admin only, тільки своїх редакторів)'
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimpleMessage'
+        '403':
+          description: Forbidden
+        '404':
+          description: Not found
+  '/auth/editor/{username}':
+    put:
+      security:
+        - bearerAuth: []
+      tags:
+        - Auth
+      summary: 'Оновити дані редактора (admin only, тільки своїх редакторів)'
+      description: |
+        Адмін може редагувати тільки своїх редакторів. Не можна змінювати: username, password, role.
+      parameters:
+        - name: username
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name:
+                  type: string
+                  nullable: true
+                email:
+                  type: string
+                  nullable: true
+                phoneCountryCode:
+                  type: string
+                  nullable: true
+                phoneNumber:
+                  type: string
+                  nullable: true
+                phone:
+                  type: string
+                  nullable: true
+                  description: Для обратной совместимости
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  editor:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      username:
+                        type: string
+                      role:
+                        type: string
+                      full_name:
+                        type: string
+                        nullable: true
+                      phoneCountryCode:
+                        type: string
+                        nullable: true
+                      phoneNumber:
+                        type: string
+                        nullable: true
+                      phone:
+                        type: string
+                        nullable: true
+                      email:
+                        type: string
+                        nullable: true
+                      isBlocked:
+                        type: boolean
+                      createdAt:
+                        type: string
+                        format: date-time
+                      updatedAt:
+                        type: string
+                        format: date-time
+        '403':
+          description: Forbidden
         '404':
           description: Not found
   '/auth/delete/{username}':
@@ -1115,6 +1543,27 @@ paths:
         '200':
           description: OK
   '/rooms/number/{roomNumber}':
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Rooms
+      summary: Отримати кімнату за roomNumber
+      parameters:
+        - name: roomNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        '404':
+          description: Not found
     put:
       security:
         - bearerAuth: []
@@ -1744,6 +2193,264 @@ paths:
       responses:
         '200':
           description: OK
+  /stays/needs-action:
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Ops
+      summary: 'Отримати список stays, які потребують дії (needsAction = true)'
+      description: |
+        Повертає список stays з needsAction=true, які потребують уваги адміністратора через просрочені check-in або check-out дати.
+      responses:
+        '200':
+          description: 'Список stays, які потребують дії'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                    description: Кількість stays
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StayNeedsAction'
+  /stays/test-auto-check:
+    post:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Ops
+      summary: Тестовий endpoint для ручного запуску перевірки просрочених stays
+      description: |
+        Виконує перевірку просрочених check-in та check-out дат вручну. Використовується для тестування логіки needsAction без очікування cron job. Знаходить stays з просроченими датами та встановлює needsAction=true.
+      responses:
+        '200':
+          description: Перевірка виконана успішно
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Auto-check completed successfully
+                  stats:
+                    type: object
+                    properties:
+                      missedCheckIns:
+                        type: integer
+                        description: Кількість stays з просроченим check-in
+                      missedCheckOuts:
+                        type: integer
+                        description: Кількість stays з просроченим check-out
+                      total:
+                        type: integer
+                        description: Загальна кількість позначених stays
+  '/stays/{id}/resolve/no-show':
+    post:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Ops
+      summary: Скасувати stay (зміна статусу на cancelled)
+      description: |
+        Скасовує stay з missed_checkin (зміна статусу на cancelled). Очищає needsAction та needsActionReason. Логує зміну статусу.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment:
+                  type: string
+                  nullable: true
+                  description: Коментар до логу (необов'язковий)
+      responses:
+        '200':
+          description: Stay скасовано успішно
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StayRoomSyncResponse'
+        '400':
+          description: Stay не потребує скасування
+        '404':
+          description: Stay not found
+  '/stays/{id}/resolve/check-in-now':
+    post:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Ops
+      summary: Виконати check-in зараз (occupied)
+      description: |
+        Виконує check-in для stay з missed_checkin. Встановлює checkIn = today, status = occupied, room.status = occupied. Очищає needsAction та needsActionReason.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment:
+                  type: string
+                  nullable: true
+                  description: Коментар до логу (необов'язковий)
+      responses:
+        '200':
+          description: Stay заселено успішно
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StayRoomSyncResponse'
+        '400':
+          description: Stay does not require check-in resolution
+        '404':
+          description: Stay not found
+  '/stays/{id}/resolve/check-out-now':
+    post:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Ops
+      summary: Виконати check-out зараз (completed)
+      description: |
+        Виконує check-out для stay з missed_checkout. Встановлює status = completed, room.status = cleaning. Очищає needsAction та needsActionReason.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comment:
+                  type: string
+                  nullable: true
+                  description: Коментар до логу (необов'язковий)
+      responses:
+        '200':
+          description: Stay виселено успішно
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StayRoomSyncResponse'
+        '400':
+          description: Stay does not require check-out resolution
+        '404':
+          description: Stay not found
+  '/stays/{id}/resolve/edit-dates':
+    post:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Ops
+      summary: Оновити дати check-in або check-out
+      description: |
+        Оновлює дати check-in або check-out для stay з needsAction. Очищає needsAction та needsActionReason. Зберігає існуючий статус (booked/occupied).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                checkIn:
+                  type: string
+                  format: date
+                  description: Нова дата заїзду (YYYY-MM-DD)
+                checkOut:
+                  type: string
+                  format: date
+                  description: Нова дата виїзду (YYYY-MM-DD)
+              description: Хоча б одна дата повинна бути надана
+      responses:
+        '200':
+          description: Дати успішно оновлено
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  stay:
+                    $ref: '#/components/schemas/Stay'
+        '400':
+          description: Stay does not require date edit resolution або невалідні дати
+        '404':
+          description: Stay not found
+  '/stays/{id}/resolve/extend-stay':
+    post:
+      security:
+        - bearerAuth: []
+      tags:
+        - Stay Ops
+      summary: Продовжити stay (оновлює checkOut)
+      description: |
+        Продовжує stay з missed_checkout, оновлюючи checkOut на нову дату. Очищає needsAction та needsActionReason.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - checkOut
+              properties:
+                checkOut:
+                  type: string
+                  format: date
+                  description: 'Нова дата виїзду (YYYY-MM-DD), повинна бути пізніше поточної'
+      responses:
+        '200':
+          description: Stay успішно продовжено
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  stay:
+                    $ref: '#/components/schemas/Stay'
+        '400':
+          description: Stay does not require extend resolution або невалідна дата
+        '404':
+          description: Stay not found
   '/stays/status/{status}':
     get:
       security:
@@ -2053,3 +2760,221 @@ paths:
           description: Unauthorized
         '403':
           description: Forbidden
+  '/guest/stays/{stayId}/link':
+    post:
+      security:
+        - bearerAuth: []
+      tags:
+        - Guest Access
+      summary: Створити або отримати лінк доступу для гостя
+      description: |
+        Генерує унікальний токен та URL для доступу гостя до інформації про проживання.
+        Якщо для цього проживання вже є активний токен, повертає існуючий.
+        Доступ тільки для admin та editor.
+      parameters:
+        - name: stayId
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          description: ID проживання
+      responses:
+        '200':
+          description: Лінк успішно згенеровано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenerateTokenResponse'
+              examples:
+                success:
+                  value:
+                    message: Guest access link generated successfully
+                    token: abc123def456ghi789
+                    url: 'http://localhost:5174/access/abc123def456ghi789'
+        '400':
+          description: Невірний stayId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Неавторизований
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає прав доступу (тільки admin/editor)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Проживання не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Помилка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  '/guest/stays/{stayId}/tokens':
+    get:
+      security:
+        - bearerAuth: []
+      tags:
+        - Guest Access
+      summary: Отримати список токенів доступу для проживання
+      description: |
+        Повертає список всіх токенів доступу для конкретного проживання.
+        Доступ тільки для admin та editor.
+      parameters:
+        - name: stayId
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+          description: ID проживання
+      responses:
+        '200':
+          description: Список токенів
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GuestAccessTokenInfo'
+              examples:
+                success:
+                  value:
+                    - id: 1
+                      token: abc123def456ghi789
+                      createdAt: '2025-11-08T10:00:00.000Z'
+                      expiresAt: null
+                      revokedAt: null
+                      lastUsedAt: '2025-11-08T12:30:00.000Z'
+                    - id: 2
+                      token: xyz789uvw456rst123
+                      createdAt: '2025-11-08T11:00:00.000Z'
+                      expiresAt: null
+                      revokedAt: null
+                      lastUsedAt: null
+        '400':
+          description: Невірний stayId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Неавторизований
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Немає прав доступу (тільки admin/editor)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Проживання не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Помилка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  '/guest/access/{token}':
+    get:
+      tags:
+        - Guest Access
+      summary: Отримати інформацію про проживання по токену
+      description: |
+        Публічний endpoint для доступу гостя до інформації про проживання.
+        Не вимагає авторизації, тільки валідний токен.
+        Wi-Fi інформація показується тільки для статусу "occupied".
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Токен доступу гостя
+      responses:
+        '200':
+          description: Інформація про проживання
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestStayView'
+              examples:
+                booked:
+                  value:
+                    stayId: 43
+                    hotelName: Hotel Example
+                    hotelAddress: 'Via Roma 1, 00100 Rome, Italy'
+                    roomNumber: '101'
+                    stayStatus: booked
+                    checkIn: '2025-11-08'
+                    checkOut: '2025-11-10'
+                    mainGuestName: Max Ingerma
+                    extraGuestNames:
+                      - Alyona Ingerma
+                    policyCheckInHour: 14
+                    policyCheckOutHour: 11
+                    wifiName: null
+                    wifiPassword: null
+                    contactPhone: +39 06 1234567
+                    contactEmail: info@hotel.example.com
+                occupied:
+                  value:
+                    stayId: 43
+                    hotelName: Hotel Example
+                    hotelAddress: 'Via Roma 1, 00100 Rome, Italy'
+                    roomNumber: '101'
+                    stayStatus: occupied
+                    checkIn: '2025-11-08'
+                    checkOut: '2025-11-10'
+                    mainGuestName: Max Ingerma
+                    extraGuestNames:
+                      - Alyona Ingerma
+                    policyCheckInHour: 14
+                    policyCheckOutHour: 11
+                    wifiName: Hotel_Guest_WiFi
+                    wifiPassword: SecurePass123
+                    contactPhone: +39 06 1234567
+                    contactEmail: info@hotel.example.com
+        '400':
+          description: Невірний токен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestAccessErrorResponse'
+        '404':
+          description: Токен не знайдено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestAccessErrorResponse'
+        '410':
+          description: Токен прострочений або відкликаний
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestAccessErrorResponse'
+        '500':
+          description: Помилка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GuestAccessErrorResponse'

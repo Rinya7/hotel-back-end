@@ -122,9 +122,10 @@ export class GuestController {
       tokenEntity = await tokenRepo.save(tokenEntity);
     }
 
-    // Тут ти потім можеш винести base URL в ENV (наприклад GUEST_APP_BASE_URL)
+    // Базовий URL для гостьового додатку
+    // Бере з env (GUEST_APP_BASE_URL) або використовує localhost для розробки
     const baseUrl: string =
-      process.env.GUEST_APP_BASE_URL ?? "https://guest.example.com";
+      process.env.GUEST_APP_BASE_URL ?? "http://localhost:5174";
 
     // Повний URL, який ми будемо відправляти гостю
     const guestUrl: string = `${baseUrl}/access/${encodeURIComponent(
@@ -304,4 +305,96 @@ export class GuestController {
 
     return phoneNumber.trim();
   }
+
+  /**
+   * GET /guest/stays/:stayId/tokens
+   * Отримує список всіх токенів доступу для конкретного проживання.
+   * Викликається з адмінки (admin/editor).
+   * Повертає список токенів з їх статусами.
+   */
+  getGuestAccessTokens = async (
+    req: AuthRequest,
+    res: Response
+  ): Promise<Response> => {
+    try {
+      const stayIdParam: string = req.params.stayId as string;
+      const stayId: number = Number(stayIdParam);
+
+      if (Number.isNaN(stayId) || stayId <= 0) {
+        return res.status(400).json({ message: "Invalid stayId parameter" });
+      }
+
+      // Перевірка прав доступу
+      if (!req.user) {
+        console.error("[getGuestAccessTokens] No user in request");
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      if (req.user.role !== ROLES.ADMIN && req.user.role !== ROLES.EDITOR && req.user.role !== ROLES.SUPER) {
+        console.error("[getGuestAccessTokens] Invalid role:", req.user.role);
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+
+    const stayRepo = this.dataSource.getRepository(Stay);
+    const tokenRepo = this.dataSource.getRepository(GuestAccessToken);
+
+    // Перевіряємо, що stay існує та належить поточному адміну
+    const stay = await stayRepo.findOne({
+      where: { id: stayId },
+      relations: ["room", "room.admin"],
+    });
+
+    if (!stay) {
+      return res.status(404).json({ message: "Stay not found" });
+    }
+
+    // Перевірка прав доступу до stay
+    // Для редакторів використовуємо adminId (ID власника готелю), для superadmin - ID з stay
+    let ownerAdminId: number;
+    if (req.user.role === ROLES.SUPER) {
+      ownerAdminId = stay.room.admin.id;
+    } else {
+      // Для admin та editor використовуємо getOwnerAdminId для консистентності
+      const { getOwnerAdminId } = await import("../utils/owner");
+      ownerAdminId = getOwnerAdminId(req);
+    }
+
+    if (stay.room.admin.id !== ownerAdminId && req.user.role !== ROLES.SUPER) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+      // Отримуємо всі токени для цього stay
+      const tokens = await tokenRepo.find({
+        where: { stay: { id: stayId } },
+        order: { createdAt: "DESC" },
+      });
+
+      // Форматуємо відповідь
+      const tokensResponse = tokens.map((token) => ({
+        id: token.id,
+        token: token.token,
+        createdAt: token.createdAt.toISOString(),
+        expiresAt: token.expiresAt ? token.expiresAt.toISOString() : null,
+        revokedAt: token.revokedAt ? token.revokedAt.toISOString() : null,
+        lastUsedAt: token.lastUsedAt ? token.lastUsedAt.toISOString() : null,
+      }));
+
+      return res.status(200).json(tokensResponse);
+    } catch (error) {
+      console.error("[getGuestAccessTokens] Error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      // Якщо помилка з getOwnerAdminId - повертаємо 401/403
+      if (errorMessage.includes("No auth user") || errorMessage.includes("Invalid adminId")) {
+        return res.status(401).json({ 
+          message: "Authentication error", 
+          error: errorMessage 
+        });
+      }
+      return res.status(500).json({ 
+        message: "Failed to fetch guest tokens",
+        error: errorMessage 
+      });
+    }
+  };
 }
