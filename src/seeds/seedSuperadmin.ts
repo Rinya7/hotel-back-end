@@ -1,6 +1,6 @@
 // src/scripts/seedSuperadmin.ts
 import "dotenv/config";
-import bcrypt from "bcrypt";
+import * as bcrypt from "bcrypt";
 import { AppDataSource } from "../config/data-source";
 import { Admin } from "../entities/Admin";
 
