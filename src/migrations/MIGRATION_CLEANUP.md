@@ -182,3 +182,4 @@ If you encounter issues:
 3. Ensure PostgreSQL version is compatible (9.5+)
 4. Check that no conflicting migrations exist in the migrations table
 
+

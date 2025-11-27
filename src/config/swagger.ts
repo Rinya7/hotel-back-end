@@ -113,7 +113,33 @@ export function setupSwagger(app: Express): OpenAPIV3.Document {
           persistAuthorization: false,
           // Відключити автоматичне перемикання на HTTPS
           validatorUrl: null,
+          // Примусово використовувати протокол з документа (не перевизначати на HTTPS)
+          requestInterceptor: (request: any) => {
+            // Якщо запит має абсолютний URL, замінюємо протокол на протокол запиту
+            if (request.url && typeof request.url === "string" && request.url.startsWith("http")) {
+              try {
+                const url = new URL(request.url);
+                url.protocol = protocol;
+                request.url = url.toString();
+              } catch {
+                // Якщо не вдалося парсити URL, залишаємо як є
+              }
+            }
+            return request;
+          },
+          // Відключити автоматичне визначення схем (http/https)
+          // Це запобігає автоматичному перемиканню на HTTPS
+          deepLinking: false,
+          // Відключити автоматичне визначення протоколу
+          // Swagger UI буде використовувати протокол з servers в документі
+          tryItOutEnabled: true,
         },
+        // Додаткові опції для кастомізації UI
+        customCss: `
+          .swagger-ui .scheme-container {
+            display: none !important;
+          }
+        `,
       };
 
       return swaggerUi.setup(document, swaggerOptions)(req, res, next);
