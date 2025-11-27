@@ -9,6 +9,19 @@ import { StayStatusLog } from "../entities/StayStatusLog";
 import { getOwnerAdminId } from "../utils/owner";
 
 /**
+ * Конвертує Date в строку формату YYYY-MM-DD
+ * Якщо вже строка - повертає як є
+ */
+const formatDateToString = (date: Date | string | null): string | null => {
+  if (!date) return null;
+  if (typeof date === "string") return date;
+  if (date instanceof Date) {
+    return date.toISOString().split("T")[0];
+  }
+  return null;
+};
+
+/**
  * GET /audit/logs — універсальний endpoint для отримання audit logs
  * Query параметри:
  * - type: "room" | "stay" (опціонально, якщо не вказано — обидва)
@@ -139,8 +152,8 @@ export const getAuditLogs = async (req: AuthRequest, res: Response) => {
             changedBy: log.changedBy || null,
             changedByRole: log.changedByRole || null,
             comment: log.comment || null,
-            stayCheckIn: log.stay ? log.stay.checkIn : null,
-            stayCheckOut: log.stay ? log.stay.checkOut : null,
+            stayCheckIn: log.stay ? formatDateToString(log.stay.checkIn) : null,
+            stayCheckOut: log.stay ? formatDateToString(log.stay.checkOut) : null,
             roomNumber: log.room ? log.room.roomNumber : null,
             stayId: log.stay ? log.stay.id : null,
             bookingCode:
@@ -179,8 +192,8 @@ export const getAuditLogs = async (req: AuthRequest, res: Response) => {
             changedBy: log.changedBy || null,
             changedByRole: log.changedByRole || null,
             comment: log.comment || null,
-            stayCheckIn: log.stay ? log.stay.checkIn : null,
-            stayCheckOut: log.stay ? log.stay.checkOut : null,
+            stayCheckIn: log.stay ? formatDateToString(log.stay.checkIn) : null,
+            stayCheckOut: log.stay ? formatDateToString(log.stay.checkOut) : null,
             roomNumber: log.stay?.room ? log.stay.room.roomNumber : null,
             stayId: log.stay ? log.stay.id : null,
             bookingCode:
