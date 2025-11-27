@@ -20,15 +20,15 @@ const app = express();
 // Безпека/базові мідлвари
 app.use(helmet());
 app.use(cors({
-  origin: [
-    "http://localhost:5173", // admin-frontend
-    "http://localhost:5174", // guest-app
-  ],
+  origin:
+    process.env.NODE_ENV === "production"
+      ? ["http://46.224.81.114:3000"]
+      : ["http://localhost:5173", "http://localhost:5174"],
   credentials: true,
 }));
 app.use(express.json());
 
-// Rate limits
+// Rate Limit Global
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -37,6 +37,8 @@ app.use(
     legacyHeaders: false,
   })
 );
+
+// Rate Limit Login
 app.use(
   "/auth/login",
   rateLimit({
@@ -47,6 +49,7 @@ app.use(
   })
 );
 
+// Test route
 app.get("/", (_req, res) => {
   res.send("Hotel backend is running!");
 });
@@ -62,9 +65,11 @@ const openapiDoc = setupSwagger(app); // це тільки для UI/JSON
  *    усі запити/відповіді згідно openapi.yaml,
  *    але ігнорувати /docs та /docs.json (див. ignorePaths).
  */
+// OpenAPI Validator (after Swagger)
 setupOpenApiValidator(app); // валідатор читає файл сам
 
 // Обробка помилок валідації OpenAPI
+// Validator error handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   if (err.status === 400 && err.errors) {
     console.error("[OpenAPI Validator] Validation error:", JSON.stringify(err.errors, null, 2));

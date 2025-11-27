@@ -66,7 +66,8 @@ async function bootstrap(): Promise<void> {
 
     // --- 4) HTTP server ---
     const server = app.listen(PORT, () => {
-      console.log(`🚀 Server is running at http://localhost:${PORT}`);
+      const baseUrl = process.env.BASE_URL ?? `http://localhost:${PORT}`;
+      console.log(`🚀 Server is running at ${baseUrl}`);
     });
 
     // --- 5) Graceful shutdown ---

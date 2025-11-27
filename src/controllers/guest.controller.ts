@@ -136,7 +136,10 @@ export class GuestController {
     // Базовий URL для гостьового додатку
     // Бере з env (GUEST_APP_BASE_URL) або використовує localhost для розробки
     const baseUrl: string =
-      process.env.GUEST_APP_BASE_URL ?? "http://localhost:5174";
+      process.env.GUEST_APP_BASE_URL ?? 
+      (process.env.NODE_ENV === "production" 
+        ? "http://46.224.81.114:3000" 
+        : "http://localhost:5174");
 
     // Повний URL, який ми будемо відправляти гостю
     const guestUrl: string = `${baseUrl}/access/${encodeURIComponent(
