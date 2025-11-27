@@ -17,7 +17,7 @@ wifi_bulk:
             updateWiFi:
               value:
                 wifiName: "HotelGuest"
-                wifiPassword: "SecurePassword123"
+                wifiPassword: "example-wifi-password"
     responses:
       "200":
         description: Wi-Fi дані успішно оновлені

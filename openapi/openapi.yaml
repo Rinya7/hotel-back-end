@@ -1096,7 +1096,7 @@ components:
           type: string
           maxLength: 100
           description: Пароль Wi-Fi мережі
-          example: SecurePassword123
+          example: example-wifi-password
 paths:
   /auth/login:
     post:
@@ -1784,7 +1784,7 @@ paths:
               updateWiFi:
                 value:
                   wifiName: HotelGuest
-                  wifiPassword: SecurePassword123
+                  wifiPassword: example-wifi-password
       responses:
         '200':
           description: Wi-Fi дані успішно оновлені
@@ -1808,6 +1808,7 @@ paths:
                       wifiPassword:
                         type: string
                         example: '***'
+                        description: Пароль Wi-Fi (приховано в відповіді)
         '400':
           description: Невалідні дані
           content:
@@ -2790,8 +2791,8 @@ paths:
                 success:
                   value:
                     message: Guest access link generated successfully
-                    token: abc123def456ghi789
-                    url: 'http://localhost:5174/access/abc123def456ghi789'
+                    token: 'example-token-64-characters-long-hexadecimal-string-generated-by-server'
+                    url: 'http://localhost:5174/access/example-token-64-characters-long-hexadecimal-string-generated-by-server'
         '400':
           description: Невірний stayId
           content:
@@ -2853,13 +2854,13 @@ paths:
                 success:
                   value:
                     - id: 1
-                      token: abc123def456ghi789
+                      token: 'example-token-64-characters-long-hexadecimal-string-generated-by-server'
                       createdAt: '2025-11-08T10:00:00.000Z'
                       expiresAt: null
                       revokedAt: null
                       lastUsedAt: '2025-11-08T12:30:00.000Z'
                     - id: 2
-                      token: xyz789uvw456rst123
+                      token: 'another-example-token-64-characters-long-hexadecimal-string-generated-by-server'
                       createdAt: '2025-11-08T11:00:00.000Z'
                       expiresAt: null
                       revokedAt: null
@@ -2951,7 +2952,7 @@ paths:
                     policyCheckInHour: 14
                     policyCheckOutHour: 11
                     wifiName: Hotel_Guest_WiFi
-                    wifiPassword: SecurePass123
+                    wifiPassword: example-wifi-password
                     contactPhone: +39 06 1234567
                     contactEmail: info@hotel.example.com
         '400':

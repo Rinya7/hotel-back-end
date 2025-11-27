@@ -4,12 +4,12 @@ export class InitSchema1760436439954 implements MigrationInterface {
     name = 'InitSchema1760436439954'
 
     public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`ALTER TABLE "admin" DROP CONSTRAINT "CHK_admin_checkin_0_23"`);
-        await queryRunner.query(`ALTER TABLE "admin" DROP CONSTRAINT "CHK_admin_checkout_0_23"`);
-        await queryRunner.query(`ALTER TABLE "room" DROP CONSTRAINT "CHK_room_checkin_0_23"`);
-        await queryRunner.query(`ALTER TABLE "room" DROP CONSTRAINT "CHK_room_checkout_0_23"`);
-        await queryRunner.query(`ALTER TABLE "room" DROP CONSTRAINT "UQ_room_admin_roomNumber"`);
-        await queryRunner.query(`ALTER TABLE "room" DROP CONSTRAINT "UQ_room_admin_roomnumber"`);
+        await queryRunner.query(`ALTER TABLE "admin" DROP CONSTRAINT IF EXISTS "CHK_admin_checkin_0_23"`);
+        await queryRunner.query(`ALTER TABLE "admin" DROP CONSTRAINT IF EXISTS "CHK_admin_checkout_0_23"`);
+        await queryRunner.query(`ALTER TABLE "room" DROP CONSTRAINT IF EXISTS "CHK_room_checkin_0_23"`);
+        await queryRunner.query(`ALTER TABLE "room" DROP CONSTRAINT IF EXISTS "CHK_room_checkout_0_23"`);
+        await queryRunner.query(`ALTER TABLE "room" DROP CONSTRAINT IF EXISTS "UQ_room_admin_roomNumber"`);
+        await queryRunner.query(`ALTER TABLE "room" DROP CONSTRAINT IF EXISTS "UQ_room_admin_roomnumber"`);
         await queryRunner.query(`ALTER TABLE "admin" ADD "defaultWifiName" character varying(255) DEFAULT 'wifi_name'`);
         await queryRunner.query(`ALTER TABLE "admin" ADD "defaultWifiPassword" character varying(255) DEFAULT 'admin'`);
         await queryRunner.query(`ALTER TABLE "stay" ALTER COLUMN "balance" TYPE numeric(10,2)`);

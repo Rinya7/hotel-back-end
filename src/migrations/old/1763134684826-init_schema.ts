@@ -4,13 +4,13 @@ export class InitSchema1763134684826 implements MigrationInterface {
     name = 'InitSchema1763134684826'
 
     public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`ALTER TABLE "room_status_log" DROP CONSTRAINT "FK_room_status_log_room"`);
-        await queryRunner.query(`ALTER TABLE "room_status_log" DROP CONSTRAINT "FK_room_status_log_stay"`);
-        await queryRunner.query(`ALTER TABLE "room_cleaning_log" DROP CONSTRAINT "FK_room_cleaning_log_room"`);
-        await queryRunner.query(`ALTER TABLE "stay_guest" DROP CONSTRAINT "FK_stay_guest_stay"`);
-        await queryRunner.query(`ALTER TABLE "stay_status_log" DROP CONSTRAINT "FK_stay_status_log_stay"`);
-        await queryRunner.query(`ALTER TABLE "room" DROP CONSTRAINT "CHK_room_wifi_start_0_23"`);
-        await queryRunner.query(`ALTER TABLE "room" DROP CONSTRAINT "CHK_room_wifi_end_0_23"`);
+        await queryRunner.query(`ALTER TABLE "room_status_log" DROP CONSTRAINT IF EXISTS "FK_room_status_log_room"`);
+        await queryRunner.query(`ALTER TABLE "room_status_log" DROP CONSTRAINT IF EXISTS "FK_room_status_log_stay"`);
+        await queryRunner.query(`ALTER TABLE "room_cleaning_log" DROP CONSTRAINT IF EXISTS "FK_room_cleaning_log_room"`);
+        await queryRunner.query(`ALTER TABLE "stay_guest" DROP CONSTRAINT IF EXISTS "FK_stay_guest_stay"`);
+        await queryRunner.query(`ALTER TABLE "stay_status_log" DROP CONSTRAINT IF EXISTS "FK_stay_status_log_stay"`);
+        await queryRunner.query(`ALTER TABLE "room" DROP CONSTRAINT IF EXISTS "CHK_room_wifi_start_0_23"`);
+        await queryRunner.query(`ALTER TABLE "room" DROP CONSTRAINT IF EXISTS "CHK_room_wifi_end_0_23"`);
         await queryRunner.query(`CREATE TABLE "guest_access_token" ("id" SERIAL NOT NULL, "token" character varying(255) NOT NULL, "createdAt" TIMESTAMP NOT NULL DEFAULT now(), "updatedAt" TIMESTAMP NOT NULL DEFAULT now(), "expiresAt" TIMESTAMP, "revokedAt" TIMESTAMP, "lastUsedAt" TIMESTAMP, "stayId" integer, CONSTRAINT "UQ_680ef15bf3b608608dbbb6a0d92" UNIQUE ("token"), CONSTRAINT "PK_92f8ac82df65563b4748be020f5" PRIMARY KEY ("id"))`);
         await queryRunner.query(`ALTER TABLE "admin" DROP COLUMN "phone"`);
         await queryRunner.query(`ALTER TABLE "room" DROP COLUMN "wifiStartHour"`);

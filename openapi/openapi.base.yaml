@@ -699,7 +699,7 @@ components:
           type: string
           maxLength: 100
           description: "Пароль Wi-Fi мережі"
-          example: "SecurePassword123"
+          example: "example-wifi-password"
 
 paths:
   # --- Auth ---

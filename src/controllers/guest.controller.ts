@@ -68,8 +68,19 @@ export class GuestController {
       return res.status(404).json({ message: "Stay not found" });
     }
 
-    const room: Room = stay.room;
+    const room: Room | undefined = stay.room;
+    
+    // Перевірка наявності room
+    if (!room) {
+      return res.status(404).json({ message: "Room not found for this stay" });
+    }
+    
     const admin: Admin | undefined = room.admin;
+    
+    // Перевірка наявності admin (опціонально, але бажано для повної інформації)
+    if (!admin) {
+      return res.status(404).json({ message: "Admin not found for this room" });
+    }
 
     // Якщо роль admin/editor — перевіряємо, що це їхній готель
     // Superadmin має доступ до всіх готелів
@@ -176,7 +187,19 @@ export class GuestController {
     }
 
     const stay: Stay = tokenEntity.stay;
-    const room: Room = stay.room;
+    
+    // Перевірка наявності stay
+    if (!stay) {
+      return res.status(404).json({ message: "Stay not found" });
+    }
+    
+    const room: Room | undefined = stay.room;
+    
+    // Перевірка наявності room
+    if (!room) {
+      return res.status(404).json({ message: "Room not found for this stay" });
+    }
+    
     const admin: Admin | undefined = room.admin;
 
     // Оновлюємо lastUsedAt для статистики (але не чекаємо на це в відповіді)
