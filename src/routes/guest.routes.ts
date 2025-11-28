@@ -41,4 +41,15 @@ router.get(
   controller.getGuestAccessTokens
 );
 
+/**
+ * POST /guest/stays/:stayId/send-email
+ * Відправка email з посиланням на бронювання (тільки admin/editor)
+ */
+router.post(
+  "/stays/:stayId/send-email",
+  authenticateToken,
+  isEditorOrAdmin,
+  controller.sendGuestAccessLinkEmail
+);
+
 export default router;

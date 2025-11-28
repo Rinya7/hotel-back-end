@@ -15,6 +15,7 @@ import {
   GuestAccessErrorResponse,
 } from "../types/guest";
 import { ROLES } from "../auth/roles";
+import { sendGuestAccessLinkEmail } from "../services/email.service";
 
 // Щоб не тягнути сюди логіку створення DataSource, ми очікуємо,
 // що ззовні нам передадуть уже готовий dataSource (як у інших контролерах)
@@ -420,6 +421,139 @@ export class GuestController {
       return res.status(500).json({ 
         message: "Failed to fetch guest tokens",
         error: errorMessage 
+      });
+    }
+  };
+
+  /**
+   * POST /guest/stays/:stayId/send-email
+   * Відправка email з посиланням на бронювання гостю
+   * Body: { email: string, subject?: string }
+   */
+  sendGuestAccessLinkEmail = async (
+    req: AuthRequest,
+    res: Response
+  ): Promise<Response> => {
+    try {
+      const stayIdParam: string = req.params.stayId as string;
+      const stayId: number = Number(stayIdParam);
+
+      if (Number.isNaN(stayId) || stayId <= 0) {
+        return res.status(400).json({ message: "Invalid stayId parameter" });
+      }
+
+      const { email, subject } = req.body as { email?: string; subject?: string };
+
+      if (!email || typeof email !== "string" || !email.trim()) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      // Перевірка прав доступу
+      if (!req.user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      if (
+        req.user.role !== ROLES.ADMIN &&
+        req.user.role !== ROLES.EDITOR &&
+        req.user.role !== ROLES.SUPER
+      ) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const stayRepo = this.dataSource.getRepository(Stay);
+      const tokenRepo = this.dataSource.getRepository(GuestAccessToken);
+
+      // Завантажуємо stay разом з room і admin
+      const stay = await stayRepo.findOne({
+        where: { id: stayId },
+        relations: ["room", "room.admin"],
+      });
+
+      if (!stay) {
+        return res.status(404).json({ message: "Stay not found" });
+      }
+
+      const room: Room | undefined = stay.room;
+      if (!room) {
+        return res.status(404).json({ message: "Room not found for this stay" });
+      }
+
+      const admin: Admin | undefined = room.admin;
+      if (!admin) {
+        return res.status(404).json({ message: "Admin not found for this room" });
+      }
+
+      // Перевірка прав доступу до stay
+      if (
+        req.user.role !== ROLES.SUPER &&
+        req.user.adminId &&
+        admin &&
+        admin.id !== req.user.adminId
+      ) {
+        return res.status(403).json({ message: "Access denied for this stay" });
+      }
+
+      // Знаходимо або створюємо токен
+      const now: Date = new Date();
+      let existingToken = await tokenRepo.findOne({
+        where: [
+          {
+            stay: { id: stay.id },
+            revokedAt: IsNull(),
+            expiresAt: IsNull(),
+          },
+          {
+            stay: { id: stay.id },
+            revokedAt: IsNull(),
+            expiresAt: Not(IsNull()),
+          },
+        ],
+        relations: ["stay"],
+      });
+
+      let tokenEntity: GuestAccessToken;
+
+      if (existingToken && (!existingToken.expiresAt || existingToken.expiresAt > now)) {
+        tokenEntity = existingToken;
+      } else {
+        tokenEntity = new GuestAccessToken();
+        tokenEntity.stay = stay;
+        tokenEntity.token = this.generateSecureToken();
+        tokenEntity.expiresAt = null;
+        tokenEntity.revokedAt = null;
+        tokenEntity.lastUsedAt = null;
+        tokenEntity = await tokenRepo.save(tokenEntity);
+      }
+
+      // Формуємо URL
+      const baseUrl: string =
+        process.env.GUEST_APP_BASE_URL ??
+        (process.env.NODE_ENV === "production"
+          ? "https://hotel-lotse.app"
+          : "http://localhost:5174");
+
+      const guestUrl: string = `${baseUrl}/access/${encodeURIComponent(tokenEntity.token)}`;
+
+      // Відправляємо email
+      const emailSubject =
+        subject || "Лінк доступу до інформації про проживання - Hotel Lotse";
+      const guestName = stay.mainGuestName || undefined;
+
+      await sendGuestAccessLinkEmail(email.trim(), emailSubject, guestUrl, guestName);
+
+      return res.status(200).json({
+        message: "Email sent successfully",
+        email: email.trim(),
+        url: guestUrl,
+      });
+    } catch (error) {
+      console.error("[sendGuestAccessLinkEmail] Error:", error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      return res.status(500).json({
+        message: "Failed to send email",
+        error: errorMessage,
       });
     }
   };
