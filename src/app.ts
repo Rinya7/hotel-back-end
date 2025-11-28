@@ -24,7 +24,7 @@ app.use(helmet());
 const allowedOrigins: string[] =
   process.env.NODE_ENV === "production"
     ? ["https://admin.hotel-lotse.app", "https://hotel-lotse.app"]
-    : ["http://localhost:5173", "http://localhost:5174"];
+    : ["http://localhost:5173", "http://localhost:5174","https://admin.hotel-lotse.app", "https://hotel-lotse.app"];
 
 app.use(
   cors({
