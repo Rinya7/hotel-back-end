@@ -19,13 +19,30 @@ const app = express();
 
 // Безпека/базові мідлвари
 app.use(helmet());
-app.use(cors({
-  origin:
-    process.env.NODE_ENV === "production"
-      ? ["http://46.224.81.114:3000"]
-      : ["http://localhost:5173", "http://localhost:5174"],
-  credentials: true,
-}));
+
+// CORS конфігурація з динамічною перевіркою origin
+const allowedOrigins: string[] =
+  process.env.NODE_ENV === "production"
+    ? ["https://admin.hotel-lotse.app", "https://hotel-lotse.app"]
+    : ["http://localhost:5173", "http://localhost:5174"];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Дозволяємо запити без origin (наприклад, Postman, curl)
+      if (!origin) {
+        return callback(null, true);
+      }
+      // Перевіряємо, чи origin в списку дозволених
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      // Блокуємо всі інші origins
+      return callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 // Rate Limit Global
