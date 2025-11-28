@@ -21,11 +21,16 @@ const app = express();
 app.use(helmet());
 
 // CORS конфігурація з динамічною перевіркою origin
-const allowedOrigins: string[] =
-  process.env.NODE_ENV === "production"
-    ? ["https://admin.hotel-lotse.app", "https://hotel-lotse.app"]
-    : ["http://localhost:5173", "http://localhost:5174","https://admin.hotel-lotse.app", "https://hotel-lotse.app"];
-
+//const allowedOrigins: string[] =
+//  process.env.NODE_ENV === "production"
+//    ? ["https://admin.hotel-lotse.app", "https://hotel-lotse.app"]
+//    : ["http://localhost:5173", "http://localhost:5174"];
+    const allowedOrigins: string[] = [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "https://admin.hotel-lotse.app",
+        "https://hotel-lotse.app",
+      ];
 app.use(
   cors({
     origin: (origin, callback) => {
