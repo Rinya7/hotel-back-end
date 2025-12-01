@@ -12,6 +12,7 @@ import { ROLES } from "../auth/roles";
 import { updateRoomStatus } from "./stayOps.controller";
 import { CreateRoomBody, UpdateRoomBody } from "../types/room";
 import { RoomStatus } from "../types/ops";
+import { Stay } from "../entities/Stay";
 
 //type RoomStatus = "free" | "occupied" | "cleaning";
 
@@ -94,6 +95,19 @@ export const getRooms = async (req: AuthRequest, res: Response) => {
     where: { admin: { id: ownerAdminId } },
     order: { roomNumber: "ASC" },
   });
+
+  // ⚠️ ВАЖЛИВО: Видалено автоматичне виправлення статусів кімнат.
+  // Раніше тут була логіка, яка автоматично змінювала room.status на "occupied",
+  // якщо знаходила occupied stay. Це порушувало ручну модель статусів.
+  //
+  // Тепер статуси кімнат змінюються ТІЛЬКИ вручну через:
+  //   - check-in endpoint (room.status = "occupied")
+  //   - check-out endpoint (room.status = "cleaning")
+  //   - markRoomCleaned endpoint (room.status = "free")
+  //   - changeRoomStatusManual endpoint (ручна зміна статусу)
+  //
+  // Якщо статус кімнати не відповідає реальності - це потрібно виправити вручну
+  // через відповідні endpoints, а не автоматично при GET запиті.
 
   return res.json(rooms);
 };
