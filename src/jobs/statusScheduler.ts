@@ -1,11 +1,26 @@
 // src/jobs/statusScheduler.ts
-// Purpose: schedule StatusService.tick() on a fixed interval.
+// 
+// ⚠️ ВАЖЛИВО: Цей scheduler ОТКЛЮЧЕНО в рамках переходу на повністю РУЧНУ модель статусів (Variant A).
+//
+// РАНІШЕ (до відключення):
+//   - Запускав StatusService.tick() кожні 30 секунд (або за CRON виразом з env)
+//   - StatusService автоматично змінював статуси Stay/Room на основі дат/політик часу
+//
+// ЗАРАЗ:
+//   - startStatusScheduler() більше НЕ викликається в index.ts
+//   - Всі зміни статусів Room/Stay виконуються ТІЛЬКИ вручну через контролери
+//   - Єдиний активний cron - StayAutoCheckScheduler (тільки needsAction, без зміни статусів)
+//
+// Цей файл залишено для історичної довідки, але функції більше не використовуються.
+// Якщо потрібно повністю видалити цей код - можна зробити це пізніше.
+//
+// Purpose: schedule StatusService.tick() on a fixed interval. [ОТКЛЮЧЕНО]
 // Features:
-//  - Controlled by env flags: STATUS_CRON, STATUS_AUTO_START
-//  - Idempotent start (no duplicate jobs)
-//  - Stop/resume for runtime control (graceful shutdown support)
-//  - Timezone-aware (APP_TIMEZONE)
-//  - No overlapping ticks (skip if previous tick still running)
+//  - Controlled by env flags: STATUS_CRON, STATUS_AUTO_START [ОТКЛЮЧЕНО]
+//  - Idempotent start (no duplicate jobs) [ОТКЛЮЧЕНО]
+//  - Stop/resume for runtime control (graceful shutdown support) [ОТКЛЮЧЕНО]
+//  - Timezone-aware (APP_TIMEZONE) [ОТКЛЮЧЕНО]
+//  - No overlapping ticks (skip if previous tick still running) [ОТКЛЮЧЕНО]
 
 import cron, { ScheduledTask } from "node-cron";
 import { StatusService } from "../services/statusService";

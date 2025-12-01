@@ -1,14 +1,25 @@
 // src/services/statusService.ts
-// Purpose:
-//   - Automatically promote/demote Stay & Room statuses based on policy hours.
-//   - Policy precedence: Room → Admin → global defaults.
-//   - Works with DATE-only columns for checkIn/checkOut by composing a local DateTime
-//     with hotel policy hours (e.g., 14:00 / 10:00) in APP_TIMEZONE.
+// 
+// ⚠️ ВАЖЛИВО: Цей сервіс ОТКЛЮЧЕНО в рамках переходу на повністю РУЧНУ модель статусів (Variant A).
 //
-// Notes:
-//   - Runs safely inside a transaction (called from a cron job).
-//   - We avoid invalid "lock" usage on find() (TypeORM requires QueryBuilder for locks).
-//   - Code is idempotent: running multiple times per minute is ok.
+// РАНІШЕ (до відключення):
+//   - Автоматично змінював Stay.status (booked → occupied, occupied → completed) на основі дат/політик часу
+//   - Автоматично змінював Room.status (occupied → free, free → occupied, cleaning) на основі дат/політик часу
+//   - Викликався через cron scheduler кожні 30 секунд
+//
+// ЗАРАЗ:
+//   - Всі зміни статусів Room/Stay виконуються ТІЛЬКИ вручну через контролери:
+//     * check-in (admin/editor вручну міняє stay + room)
+//     * check-out (вручну)
+//     * set cleaning (вручну)
+//     * finish cleaning (вручну)
+//     * cancel stay (вручну)
+//
+//   - Cron може робити тільки одне: встановлювати stay.needsAction = true для просрочених stays
+//     (це робить StayAutoCheckService, який НЕ змінює статуси)
+//
+// Цей файл залишено для історичної довідки, але метод tick() більше не викликається.
+// Якщо потрібно повністю видалити цей код - можна зробити це пізніше.
 
 import { AppDataSource } from "../config/data-source";
 import { Stay } from "../entities/Stay";
@@ -35,122 +46,62 @@ export class StatusService {
   // Repositories via 'manager' inside a transaction ensure we operate within the tx.
   // No instance repositories are needed here.
 
-  /** Cron tick: promote/demote statuses according to policy hours. */
+  /**
+   * ⚠️ ОТКЛЮЧЕНО: Цей метод більше не викликається.
+   * 
+   * Раніше він автоматично змінював статуси Stay/Room на основі дат/політик часу:
+   *   - booked → occupied (коли настав час check-in)
+   *   - occupied → completed (коли пройшов час check-out)
+   *   - room.status → free/occupied/cleaning (на основі активних stays)
+   * 
+   * Тепер всі зміни статусів виконуються ТІЛЬКИ вручну через контролери.
+   * 
+   * @deprecated Використання цього методу заборонено. Використовуйте ручні endpoints.
+   */
   public async tick(): Promise<void> {
+    // Метод залишено порожнім, щоб уникнути помилок компіляції, якщо десь залишився виклик.
+    // Насправді цей метод більше не повинен викликатися.
+    console.warn(
+      "[StatusService] tick() викликано, але автоматична зміна статусів ОТКЛЮЧЕНА. " +
+      "Всі зміни статусів тепер виконуються тільки вручну через контролери."
+    );
+    return;
+    
+    /* ЗАКОМЕНТОВАНО - автоматична логіка більше не використовується:
     const { now } = nowWithTolerance();
 
     await AppDataSource.transaction(async (manager) => {
       const todayStart = now.startOf("day");
 
       // === 1) BOOKED → OCCUPIED when check-in time has arrived ===
-      // Prefilter by day (DATE-only) to get candidates, then refine by policy hours in code.
-      const bookedCandidates = await manager.getRepository(Stay).find({
-        where: {
-          status: "booked",
-          checkIn: LessThanOrEqual(todayStart.toJSDate()),
-          checkOut: MoreThanOrEqual(todayStart.toJSDate()),
-        },
-        relations: ["room", "room.admin"], // need admin for fallback policy
-        // NOTE: lock is not supported on find() options; use QueryBuilder if needed.
-      });
-
-      for (const stay of bookedCandidates) {
-        const room = stay.room;
-        const { inHour, outHour } = policyHoursFor(room);
-
-        const checkInAt = makeLocalDateTime(stay.checkIn, inHour);
-        const checkOutAt = makeLocalDateTime(stay.checkOut, outHour);
-
-        // Stay covers "now" by policy hours → ensure occupied
-        if (now >= checkInAt && now < checkOutAt) {
-          if (stay.status !== "occupied") {
-            stay.status = "occupied";
-            await manager.getRepository(Stay).save(stay);
-          }
-          if (room.status !== "occupied") {
-            room.status = "occupied";
-            await manager.getRepository(Room).save(room);
-          }
-        }
-      }
-
+      // ... (весь код закоментовано)
+      
       // === 2) OCCUPIED → COMPLETED when check-out time has passed ===
-      const occupiedCandidates = await manager.getRepository(Stay).find({
-        where: {
-          status: "occupied",
-          checkOut: LessThanOrEqual(todayStart.toJSDate()),
-        },
-        relations: ["room", "room.admin"],
-      });
-
-      for (const stay of occupiedCandidates) {
-        const room = stay.room;
-        const { outHour } = policyHoursFor(room);
-        const checkoutAt = makeLocalDateTime(stay.checkOut, outHour);
-
-        if (now >= checkoutAt) {
-          // 2.1) complete the stay
-          stay.status = "completed";
-          await manager.getRepository(Stay).save(stay);
-
-          // 2.2) decide the new room status
-          // Is there any stay (booked or occupied) that covers "now" by day?
-          const covering = await manager.getRepository(Stay).findOne({
-            where: [
-              {
-                room: { id: room.id },
-                status: "occupied",
-                checkIn: LessThanOrEqual(todayStart.toJSDate()),
-                checkOut: MoreThanOrEqual(todayStart.toJSDate()),
-              },
-              {
-                room: { id: room.id },
-                status: "booked",
-                checkIn: LessThanOrEqual(todayStart.toJSDate()),
-                checkOut: MoreThanOrEqual(todayStart.toJSDate()),
-              },
-            ],
-            relations: ["room", "room.admin"],
-          });
-
-          let newRoomStatus: RoomStatus = "cleaning";
-
-          if (covering) {
-            // Refine by exact policy hours for the covering stay
-            const covRoom = covering.room;
-            const { inHour: covIn, outHour: covOut } = policyHoursFor(covRoom);
-            const covInAt = makeLocalDateTime(covering.checkIn, covIn);
-            const covOutAt = makeLocalDateTime(covering.checkOut, covOut);
-
-            if (now >= covInAt && now < covOutAt) {
-              // If it was booked but its check-in time has arrived, promote it.
-              if (covering.status === "booked") {
-                covering.status = "occupied";
-                await manager.getRepository(Stay).save(covering);
-              }
-              newRoomStatus = "occupied";
-            }
-          }
-
-          if (room.status !== newRoomStatus) {
-            room.status = newRoomStatus;
-            await manager.getRepository(Room).save(room);
-          }
-        }
-      }
-
+      // ... (весь код закоментовано)
+      
       // === 3) Safety reconciliation (compute from stays for all rooms) ===
-      await this.reconcileRooms(manager);
+      // await this.reconcileRooms(manager);
     });
+    */
   }
 
   /**
-   * Recompute Room.status for all rooms using policy-hour windows:
-   *   - Skip rooms that are currently in "cleaning"
-   *   - "occupied" if a booked/occupied stay actually covers "now" by policy hours
-   *   - else "free"
+   * ⚠️ ОТКЛЮЧЕНО: Цей метод більше не викликається.
+   * 
+   * Раніше він автоматично перераховував Room.status для всіх кімнат на основі:
+   *   - активних stays (booked/occupied)
+   *   - політик часу (check-in/check-out hours)
+   *   - поточної дати/часу
+   * 
+   * Це конфліктувало з ручною моделлю, де статуси змінюються тільки через контролери.
+   * 
+   * @deprecated Використання цього методу заборонено.
    */
   private async reconcileRooms(manager: EntityManager): Promise<void> {
+    // Метод залишено порожнім, щоб уникнути помилок компіляції.
+    return;
+    
+    /* ЗАКОМЕНТОВАНО - автоматична логіка більше не використовується:
     const { now } = nowWithTolerance();
     const todayStart = now.startOf("day");
 
@@ -205,5 +156,6 @@ export class StatusService {
         await manager.getRepository(Room).save(room);
       }
     }
+    */
   }
 }

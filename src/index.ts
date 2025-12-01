@@ -8,10 +8,11 @@ dotenv.config();
 
 import app from "./app";
 import { AppDataSource } from "./config/data-source";
-import {
-  startStatusScheduler,
-  stopStatusScheduler,
-} from "./jobs/statusScheduler";
+// ОТКЛЮЧЕНО: StatusScheduler більше не використовується (повністю ручна модель статусів)
+// import {
+//   startStatusScheduler,
+//   stopStatusScheduler,
+// } from "./jobs/statusScheduler";
 import {
   startStayAutoCheckScheduler,
   stopStayAutoCheckScheduler,
@@ -54,12 +55,24 @@ async function bootstrap(): Promise<void> {
     }
 
     // --- 3) Scheduler ---
+    // ВАЖЛИВО: Ми використовуємо повністю РУЧНУ модель статусів (Variant A).
+    // Статуси Room/Stay змінюються ТІЛЬКИ через ручні endpoints (check-in, check-out, set cleaning, etc.).
+    // 
+    // ОТКЛЮЧЕНО: startStatusScheduler() - автоматична зміна статусів через StatusService.tick()
+    // Це було видалено, оскільки воно автоматично міняло:
+    //   - Stay.status (booked → occupied, occupied → completed)
+    //   - Room.status (occupied → free, free → occupied, cleaning і т.д.)
+    //   на основі дат/політик часу, що конфліктувало з ручною моделлю.
+    //
+    // ЗАЛИШАЄМО: startStayAutoCheckScheduler() - автоматична перевірка просрочених stays
+    // Цей сервіс ТІЛЬКИ встановлює needsAction=true для stays, які потребують дії,
+    // але НЕ змінює статуси Room/Stay.
     if (START_SCHEDULER) {
-      startStatusScheduler(); // should be idempotent
-      console.log("⏱️  Status scheduler started");
+      // startStatusScheduler(); // ОТКЛЮЧЕНО - автоматична зміна статусів більше не використовується
+      // console.log("⏱️  Status scheduler started");
       
-      startStayAutoCheckScheduler(); // автоматична перевірка просрочених stays
-      console.log("⏱️  Stay auto-check scheduler started");
+      startStayAutoCheckScheduler(); // автоматична перевірка просрочених stays (тільки needsAction)
+      console.log("⏱️  Stay auto-check scheduler started (needsAction only, no status changes)");
     } else {
       console.log("⏭️  START_SCHEDULER=false — scheduler not started");
     }
@@ -77,8 +90,8 @@ async function bootstrap(): Promise<void> {
 
         // Stop cron first (so no new DB work enters while we are closing)
         try {
-          stopStatusScheduler(); // make sure jobs are halted
-          console.log("⏹️  Status scheduler stopped");
+          // stopStatusScheduler(); // ОТКЛЮЧЕНО - scheduler більше не використовується
+          // console.log("⏹️  Status scheduler stopped");
           
           stopStayAutoCheckScheduler();
           console.log("⏹️  Stay auto-check scheduler stopped");
