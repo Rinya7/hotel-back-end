@@ -55,33 +55,29 @@ export const getStaysByStatus = async (req: AuthRequest, res: Response) => {
 };
 
 /** Helpers for "today" boundaries in hotel timezone */
-function todayDateInHotelTZ(): Date {
+function todayDateInHotelTZ(): string {
   const now = DateTime.now().setZone(APP_TIMEZONE).startOf("day");
-  return now.toJSDate();
+  // Возвращаем строку в формате YYYY-MM-DD для сравнения с полем типа date
+  return now.toFormat("yyyy-MM-dd");
 }
 
 /** GET /stays/today/arrivals — stays with checkIn = today (DATE) and status booked or occupied */
 export const getArrivalsToday = async (req: AuthRequest, res: Response) => {
   try {
     const ownerAdminId = getOwnerAdminId(req);
-    const today = todayDateInHotelTZ();
+    const todayStr = todayDateInHotelTZ();
 
-    const stays = await AppDataSource.getRepository(Stay).find({
-      where: [
-        {
-          room: { admin: { id: ownerAdminId } },
-          status: "booked",
-          checkIn: today,
-        },
-        {
-          room: { admin: { id: ownerAdminId } },
-          status: "occupied",
-          checkIn: today,
-        },
-      ],
-      relations: ["room"],
-      order: { checkIn: "ASC", id: "ASC" },
-    });
+    // Используем QueryBuilder для правильного сравнения дат
+    const stayRepo = AppDataSource.getRepository(Stay);
+    const stays = await stayRepo
+      .createQueryBuilder("stay")
+      .leftJoinAndSelect("stay.room", "room")
+      .where("room.adminId = :adminId", { adminId: ownerAdminId })
+      .andWhere("DATE(stay.checkIn) = :today", { today: todayStr })
+      .andWhere("stay.status IN (:...statuses)", { statuses: ["booked", "occupied"] })
+      .orderBy("stay.checkIn", "ASC")
+      .addOrderBy("stay.id", "ASC")
+      .getMany();
 
     const items = stays.map((s) => ({
       stayId: s.id,
@@ -104,25 +100,24 @@ export const getArrivalsToday = async (req: AuthRequest, res: Response) => {
   }
 };
 
-/** GET /stays/today/departures — stays with checkOut = today (DATE) and status occupied */
+/** GET /stays/today/departures — stays with checkOut = today (DATE) and status occupied or completed */
 export const getDeparturesToday = async (req: AuthRequest, res: Response) => {
   try {
     const ownerAdminId = getOwnerAdminId(req);
-    const today = todayDateInHotelTZ();
+    const todayStr = todayDateInHotelTZ();
 
-    const stays = await AppDataSource.getRepository(Stay).find({
-      where: [
-        {
-          room: { admin: { id: ownerAdminId } },
-          status: "occupied",
-          checkOut: today,
-        },
-        // optionally include "booked with same-day out" if you allow day-use:
-        // { room: { admin: { id: ownerAdminId } }, status: "booked", checkOut: today },
-      ],
-      relations: ["room"],
-      order: { checkOut: "ASC", id: "ASC" },
-    });
+    // Используем QueryBuilder для правильного сравнения дат
+    // Включаем также stays со статусом "completed", если checkOut = today
+    const stayRepo = AppDataSource.getRepository(Stay);
+    const stays = await stayRepo
+      .createQueryBuilder("stay")
+      .leftJoinAndSelect("stay.room", "room")
+      .where("room.adminId = :adminId", { adminId: ownerAdminId })
+      .andWhere("DATE(stay.checkOut) = :today", { today: todayStr })
+      .andWhere("stay.status IN (:...statuses)", { statuses: ["occupied", "completed"] })
+      .orderBy("stay.checkOut", "ASC")
+      .addOrderBy("stay.id", "ASC")
+      .getMany();
 
     const items = stays.map((s) => ({
       stayId: s.id,
