@@ -63,21 +63,25 @@ function todayDateInHotelTZ(): string {
   return now.toFormat("yyyy-MM-dd");
 }
 
-/** GET /stays/today/arrivals — stays with checkIn = today (DATE) and status booked only */
+/** 
+ * GET /stays/today/arrivals — stays with checkIn = today (DATE) and status booked only
+ * 
+ * ВАЖНО: Показываем ТОЛЬКО stays со статусом "booked" (забронированные, но еще не заселенные).
+ * Если stay уже имеет статус "occupied" (заселен), он НЕ должен показываться в arrivals,
+ * так как заезд уже произошел.
+ */
 export const getArrivalsToday = async (req: AuthRequest, res: Response) => {
   try {
     const ownerAdminId = getOwnerAdminId(req);
     const todayStr = todayDateInHotelTZ();
 
-    // Используем QueryBuilder для правильного сравнения дат
-    // Показываем только "booked" stays - те, которые еще не заселены (occupied)
-    // Если stay уже "occupied", значит заезд уже произошел, его не показываем в arrivals
     const stayRepo = AppDataSource.getRepository(Stay);
     const stays = await stayRepo
       .createQueryBuilder("stay")
       .leftJoinAndSelect("stay.room", "room")
       .where("room.adminId = :adminId", { adminId: ownerAdminId })
       .andWhere("DATE(stay.checkIn) = :today", { today: todayStr })
+      // КРИТИЧНО: Фильтруем только по статусу "booked" - не показываем "occupied" stays
       .andWhere("stay.status = :status", { status: "booked" })
       .orderBy("stay.checkIn", "ASC")
       .addOrderBy("stay.id", "ASC")
