@@ -670,76 +670,84 @@ export const resolveNoShow = async (req: AuthRequest, res: Response) => {
  * Очищає needsAction.
  */
 export const resolveCheckInNow = async (req: AuthRequest, res: Response) => {
-  const ownerAdminId = getOwnerAdminId(req);
-  const stayId = Number(req.params.id);
-  const actor = await resolveActor(req);
-  const { comment } = (req.body ?? {}) as { comment?: string };
+  try {
+    const ownerAdminId = getOwnerAdminId(req);
+    const stayId = Number(req.params.id);
+    const actor = await resolveActor(req);
+    const { comment } = (req.body ?? {}) as { comment?: string };
 
-  const stay = await loadStayWithRoom(stayId, ownerAdminId);
-  if (!stay) {
-    return res.status(404).json({ message: "Stay not found" });
-  }
+    const stay = await loadStayWithRoom(stayId, ownerAdminId);
+    if (!stay) {
+      return res.status(404).json({ message: "Stay not found" });
+    }
 
-  if (!stay.needsAction || stay.needsActionReason !== "missed_checkin") {
-    return res.status(400).json({
-      message: "Stay does not require check-in resolution",
+    if (!stay.needsAction || stay.needsActionReason !== "missed_checkin") {
+      return res.status(400).json({
+        message: "Stay does not require check-in resolution",
+      });
+    }
+
+    // Проверка состояния комнаты: не должна быть occupied или cleaning
+    if (stay.room.status === "occupied" || stay.room.status === "cleaning") {
+      return res.status(400).json({
+        message: "Room is not available for check-in. Current status: " + stay.room.status,
+      });
+    }
+
+    // Проверка конфликтов: проверяем, нет ли другого occupied stay в этой комнате
+    const stayRepo = AppDataSource.getRepository(Stay);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checkOutDate = new Date(stay.checkOut);
+    checkOutDate.setHours(0, 0, 0, 0);
+
+    const conflictingStays = await stayRepo
+      .createQueryBuilder("s")
+      .leftJoin("s.room", "r")
+      .where("r.id = :roomId", { roomId: stay.room.id })
+      .andWhere("s.id != :stayId", { stayId: stay.id })
+      .andWhere("s.status = :status", { status: "occupied" })
+      .andWhere("s.checkIn < :checkOut AND s.checkOut > :checkIn", {
+        checkIn: today,
+        checkOut: checkOutDate,
+      })
+      .getMany();
+
+    if (conflictingStays.length > 0) {
+      return res.status(400).json({
+        message: "Room is already occupied by another stay during this period",
+      });
+    }
+
+    // Встановлюємо checkIn = today
+    stay.checkIn = today;
+    await AppDataSource.getRepository(Stay).save(stay);
+
+    // Встановлюємо статус occupied
+    const result = await persistStayStatusChange(stay, {
+      nextStatus: "occupied",
+      actor,
+      comment: comment ?? "Check-in performed manually after missed check-in date",
+      roomDirective: "auto", // room.status = "occupied"
+    });
+
+    // Очищаємо needsAction
+    stay.needsAction = false;
+    stay.needsActionReason = null;
+    await AppDataSource.getRepository(Stay).save(stay);
+
+    return res.json({
+      message: "Stay checked in successfully",
+      stay: sortStayLogs(result.stay),
+      room: result.room,
+    });
+  } catch (error) {
+    console.error("[resolveCheckInNow] Error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return res.status(500).json({
+      message: `Failed to check in stay: ${errorMessage}`,
     });
   }
-
-  // Проверка состояния комнаты: не должна быть occupied или cleaning
-  if (stay.room.status === "occupied" || stay.room.status === "cleaning") {
-    return res.status(400).json({
-      message: "Room is not available for check-in. Current status: " + stay.room.status,
-    });
-  }
-
-  // Проверка конфликтов: проверяем, нет ли другого occupied stay в этой комнате
-  const stayRepo = AppDataSource.getRepository(Stay);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const checkOutDate = new Date(stay.checkOut);
-  checkOutDate.setHours(0, 0, 0, 0);
-
-  const conflictingStays = await stayRepo
-    .createQueryBuilder("s")
-    .leftJoin("s.room", "r")
-    .where("r.id = :roomId", { roomId: stay.room.id })
-    .andWhere("s.id != :stayId", { stayId: stay.id })
-    .andWhere("s.status = :status", { status: "occupied" })
-    .andWhere("s.checkIn < :checkOut AND s.checkOut > :checkIn", {
-      checkIn: today,
-      checkOut: checkOutDate,
-    })
-    .getMany();
-
-  if (conflictingStays.length > 0) {
-    return res.status(400).json({
-      message: "Room is already occupied by another stay during this period",
-    });
-  }
-
-  // Встановлюємо checkIn = today
-  stay.checkIn = today;
-  await AppDataSource.getRepository(Stay).save(stay);
-
-  // Встановлюємо статус occupied
-  const result = await persistStayStatusChange(stay, {
-    nextStatus: "occupied",
-    actor,
-    comment: comment ?? "Check-in performed manually after missed check-in date",
-    roomDirective: "auto", // room.status = "occupied"
-  });
-
-  // Очищаємо needsAction
-  stay.needsAction = false;
-  stay.needsActionReason = null;
-  await AppDataSource.getRepository(Stay).save(stay);
-
-  return res.json({
-    message: "Stay checked in successfully",
-    stay: sortStayLogs(result.stay),
-    room: result.room,
-  });
 };
 
 /**
@@ -793,96 +801,115 @@ export const resolveCheckOutNow = async (req: AuthRequest, res: Response) => {
  * Зберігає існуючий статус (booked/occupied).
  */
 export const resolveEditDates = async (req: AuthRequest, res: Response) => {
-  const ownerAdminId = getOwnerAdminId(req);
-  const stayId = Number(req.params.id);
-  const { checkIn, checkOut } = req.body as {
-    checkIn?: string;
-    checkOut?: string;
-  };
+  try {
+    const ownerAdminId = getOwnerAdminId(req);
+    const stayId = Number(req.params.id);
+    const { checkIn, checkOut } = req.body as {
+      checkIn?: string;
+      checkOut?: string;
+    };
 
-  const stay = await loadStayWithRoom(stayId, ownerAdminId);
-  if (!stay) {
-    return res.status(404).json({ message: "Stay not found" });
-  }
+    const stay = await loadStayWithRoom(stayId, ownerAdminId);
+    if (!stay) {
+      return res.status(404).json({ message: "Stay not found" });
+    }
 
-  if (!stay.needsAction) {
-    return res.status(400).json({
-      message: "Stay does not require date edit resolution",
+    if (!stay.needsAction) {
+      return res.status(400).json({
+        message: "Stay does not require date edit resolution",
+      });
+    }
+
+    // Вычисляем новые даты для проверки конфликтов
+    let newCheckIn: Date;
+    let newCheckOut: Date;
+    
+    try {
+      newCheckIn = checkIn ? new Date(checkIn) : new Date(stay.checkIn);
+      newCheckIn.setHours(0, 0, 0, 0);
+      newCheckOut = checkOut ? new Date(checkOut) : new Date(stay.checkOut);
+      newCheckOut.setHours(0, 0, 0, 0);
+    } catch (dateError) {
+      return res.status(400).json({
+        message: "Invalid date format. Please use YYYY-MM-DD format",
+      });
+    }
+
+    // Валидация: checkOut должен быть после checkIn
+    if (newCheckOut <= newCheckIn) {
+      return res.status(400).json({
+        message: "Check-out date must be after check-in date",
+      });
+    }
+
+    // Проверка конфликтов: проверяем, нет ли других активных stays в этой комнате с пересекающимися датами
+    const stayRepo = AppDataSource.getRepository(Stay);
+    const conflictingStays = await stayRepo
+      .createQueryBuilder("s")
+      .leftJoin("s.room", "r")
+      .where("r.id = :roomId", { roomId: stay.room.id })
+      .andWhere("s.id != :stayId", { stayId: stay.id })
+      .andWhere("s.status IN (:...activeStatuses)", {
+        activeStatuses: ["booked", "occupied"],
+      })
+      .andWhere("s.checkIn < :newCheckOut AND s.checkOut > :newCheckIn", {
+        newCheckIn,
+        newCheckOut,
+      })
+      .getMany();
+
+    if (conflictingStays.length > 0) {
+      const conflictInfo = conflictingStays.map((s) => ({
+        id: s.id,
+        guest: s.mainGuestName,
+        checkIn: s.checkIn.toISOString().slice(0, 10),
+        checkOut: s.checkOut.toISOString().slice(0, 10),
+        status: s.status,
+      }));
+      return res.status(400).json({
+        message: "The selected dates conflict with existing bookings in this room",
+        conflicts: conflictInfo,
+      });
+    }
+
+    // Оновлюємо дати якщо надані
+    if (checkIn) {
+      stay.checkIn = newCheckIn;
+    }
+
+    if (checkOut) {
+      stay.checkOut = newCheckOut;
+    }
+
+    // Очищаємо needsAction
+    stay.needsAction = false;
+    stay.needsActionReason = null;
+
+    await AppDataSource.getRepository(Stay).save(stay);
+
+    // Оновлюємо stay з relations для відповіді
+    const updatedStay = await AppDataSource.getRepository(Stay).findOne({
+      where: { id: stay.id },
+      relations: ["room", "statusLogs", "guests"],
+    });
+
+    if (!updatedStay) {
+      return res.status(500).json({ 
+        message: "Failed to refresh stay after update. Please try again." 
+      });
+    }
+
+    return res.json({
+      message: "Stay dates updated successfully",
+      stay: sortStayLogs(updatedStay),
+    });
+  } catch (error) {
+    console.error("[resolveEditDates] Error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return res.status(500).json({
+      message: `Failed to update stay dates: ${errorMessage}`,
     });
   }
-
-  // Вычисляем новые даты для проверки конфликтов
-  const newCheckIn = checkIn ? new Date(checkIn) : new Date(stay.checkIn);
-  newCheckIn.setHours(0, 0, 0, 0);
-  const newCheckOut = checkOut ? new Date(checkOut) : new Date(stay.checkOut);
-  newCheckOut.setHours(0, 0, 0, 0);
-
-  // Валидация: checkOut должен быть после checkIn
-  if (newCheckOut <= newCheckIn) {
-    return res.status(400).json({
-      message: "Check-out date must be after check-in date",
-    });
-  }
-
-  // Проверка конфликтов: проверяем, нет ли других активных stays в этой комнате с пересекающимися датами
-  const stayRepo = AppDataSource.getRepository(Stay);
-  const conflictingStays = await stayRepo
-    .createQueryBuilder("s")
-    .leftJoin("s.room", "r")
-    .where("r.id = :roomId", { roomId: stay.room.id })
-    .andWhere("s.id != :stayId", { stayId: stay.id })
-    .andWhere("s.status IN (:...activeStatuses)", {
-      activeStatuses: ["booked", "occupied"],
-    })
-    .andWhere("s.checkIn < :newCheckOut AND s.checkOut > :newCheckIn", {
-      newCheckIn,
-      newCheckOut,
-    })
-    .getMany();
-
-  if (conflictingStays.length > 0) {
-    const conflictInfo = conflictingStays.map((s) => ({
-      id: s.id,
-      guest: s.mainGuestName,
-      checkIn: s.checkIn.toISOString().slice(0, 10),
-      checkOut: s.checkOut.toISOString().slice(0, 10),
-      status: s.status,
-    }));
-    return res.status(400).json({
-      message: "The selected dates conflict with existing bookings in this room",
-      conflicts: conflictInfo,
-    });
-  }
-
-  // Оновлюємо дати якщо надані
-  if (checkIn) {
-    stay.checkIn = newCheckIn;
-  }
-
-  if (checkOut) {
-    stay.checkOut = newCheckOut;
-  }
-
-  // Очищаємо needsAction
-  stay.needsAction = false;
-  stay.needsActionReason = null;
-
-  await AppDataSource.getRepository(Stay).save(stay);
-
-  // Оновлюємо stay з relations для відповіді
-  const updatedStay = await AppDataSource.getRepository(Stay).findOne({
-    where: { id: stay.id },
-    relations: ["room", "statusLogs", "guests"],
-  });
-
-  if (!updatedStay) {
-    return res.status(500).json({ message: "Failed to refresh stay" });
-  }
-
-  return res.json({
-    message: "Stay dates updated successfully",
-    stay: sortStayLogs(updatedStay),
-  });
 };
 
 /**
@@ -891,89 +918,108 @@ export const resolveEditDates = async (req: AuthRequest, res: Response) => {
  * Очищає needsAction.
  */
 export const resolveExtendStay = async (req: AuthRequest, res: Response) => {
-  const ownerAdminId = getOwnerAdminId(req);
-  const stayId = Number(req.params.id);
-  const { checkOut } = req.body as { checkOut: string };
+  try {
+    const ownerAdminId = getOwnerAdminId(req);
+    const stayId = Number(req.params.id);
+    const { checkOut } = req.body as { checkOut: string };
 
-  if (!checkOut) {
-    return res.status(400).json({ message: "checkOut is required" });
-  }
+    if (!checkOut) {
+      return res.status(400).json({ message: "checkOut is required" });
+    }
 
-  const stay = await loadStayWithRoom(stayId, ownerAdminId);
-  if (!stay) {
-    return res.status(404).json({ message: "Stay not found" });
-  }
+    const stay = await loadStayWithRoom(stayId, ownerAdminId);
+    if (!stay) {
+      return res.status(404).json({ message: "Stay not found" });
+    }
 
-  if (!stay.needsAction || stay.needsActionReason !== "missed_checkout") {
-    return res.status(400).json({
-      message: "Stay does not require extend resolution",
+    if (!stay.needsAction || stay.needsActionReason !== "missed_checkout") {
+      return res.status(400).json({
+        message: "Stay does not require extend resolution",
+      });
+    }
+
+    // Вычисляем новую дату выезда для проверки конфликтов
+    let checkOutDate: Date;
+    let checkInDate: Date;
+    
+    try {
+      checkOutDate = new Date(checkOut);
+      checkOutDate.setHours(0, 0, 0, 0);
+      checkInDate = new Date(stay.checkIn);
+      checkInDate.setHours(0, 0, 0, 0);
+    } catch (dateError) {
+      return res.status(400).json({
+        message: "Invalid date format. Please use YYYY-MM-DD format",
+      });
+    }
+
+    // Валидация: checkOut должен быть после checkIn
+    if (checkOutDate <= checkInDate) {
+      return res.status(400).json({
+        message: "Check-out date must be after check-in date",
+      });
+    }
+
+    // Проверка конфликтов: проверяем, нет ли других активных stays в этой комнате с пересекающимися датами
+    const stayRepo = AppDataSource.getRepository(Stay);
+    const conflictingStays = await stayRepo
+      .createQueryBuilder("s")
+      .leftJoin("s.room", "r")
+      .where("r.id = :roomId", { roomId: stay.room.id })
+      .andWhere("s.id != :stayId", { stayId: stay.id })
+      .andWhere("s.status IN (:...activeStatuses)", {
+        activeStatuses: ["booked", "occupied"],
+      })
+      .andWhere("s.checkIn < :newCheckOut AND s.checkOut > :checkIn", {
+        checkIn: checkInDate,
+        newCheckOut: checkOutDate,
+      })
+      .getMany();
+
+    if (conflictingStays.length > 0) {
+      const conflictInfo = conflictingStays.map((s) => ({
+        id: s.id,
+        guest: s.mainGuestName,
+        checkIn: s.checkIn.toISOString().slice(0, 10),
+        checkOut: s.checkOut.toISOString().slice(0, 10),
+        status: s.status,
+      }));
+      return res.status(400).json({
+        message: "The extended dates conflict with existing bookings in this room",
+        conflicts: conflictInfo,
+      });
+    }
+
+    // Оновлюємо checkOut
+    stay.checkOut = checkOutDate;
+
+    // Очищаємо needsAction
+    stay.needsAction = false;
+    stay.needsActionReason = null;
+
+    await AppDataSource.getRepository(Stay).save(stay);
+
+    // Оновлюємо stay з relations для відповіді
+    const updatedStay = await AppDataSource.getRepository(Stay).findOne({
+      where: { id: stay.id },
+      relations: ["room", "statusLogs", "guests"],
+    });
+
+    if (!updatedStay) {
+      return res.status(500).json({ 
+        message: "Failed to refresh stay after update. Please try again." 
+      });
+    }
+
+    return res.json({
+      message: "Stay extended successfully",
+      stay: sortStayLogs(updatedStay),
+    });
+  } catch (error) {
+    console.error("[resolveExtendStay] Error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return res.status(500).json({
+      message: `Failed to extend stay: ${errorMessage}`,
     });
   }
-
-  // Вычисляем новую дату выезда для проверки конфликтов
-  const checkOutDate = new Date(checkOut);
-  checkOutDate.setHours(0, 0, 0, 0);
-  const checkInDate = new Date(stay.checkIn);
-  checkInDate.setHours(0, 0, 0, 0);
-
-  // Валидация: checkOut должен быть после checkIn
-  if (checkOutDate <= checkInDate) {
-    return res.status(400).json({
-      message: "Check-out date must be after check-in date",
-    });
-  }
-
-  // Проверка конфликтов: проверяем, нет ли других активных stays в этой комнате с пересекающимися датами
-  const stayRepo = AppDataSource.getRepository(Stay);
-  const conflictingStays = await stayRepo
-    .createQueryBuilder("s")
-    .leftJoin("s.room", "r")
-    .where("r.id = :roomId", { roomId: stay.room.id })
-    .andWhere("s.id != :stayId", { stayId: stay.id })
-    .andWhere("s.status IN (:...activeStatuses)", {
-      activeStatuses: ["booked", "occupied"],
-    })
-    .andWhere("s.checkIn < :newCheckOut AND s.checkOut > :checkIn", {
-      checkIn: checkInDate,
-      newCheckOut: checkOutDate,
-    })
-    .getMany();
-
-  if (conflictingStays.length > 0) {
-    const conflictInfo = conflictingStays.map((s) => ({
-      id: s.id,
-      guest: s.mainGuestName,
-      checkIn: s.checkIn.toISOString().slice(0, 10),
-      checkOut: s.checkOut.toISOString().slice(0, 10),
-      status: s.status,
-    }));
-    return res.status(400).json({
-      message: "The extended dates conflict with existing bookings in this room",
-      conflicts: conflictInfo,
-    });
-  }
-
-  // Оновлюємо checkOut
-  stay.checkOut = checkOutDate;
-
-  // Очищаємо needsAction
-  stay.needsAction = false;
-  stay.needsActionReason = null;
-
-  await AppDataSource.getRepository(Stay).save(stay);
-
-  // Оновлюємо stay з relations для відповіді
-  const updatedStay = await AppDataSource.getRepository(Stay).findOne({
-    where: { id: stay.id },
-    relations: ["room", "statusLogs", "guests"],
-  });
-
-  if (!updatedStay) {
-    return res.status(500).json({ message: "Failed to refresh stay" });
-  }
-
-  return res.json({
-    message: "Stay extended successfully",
-    stay: sortStayLogs(updatedStay),
-  });
 };
