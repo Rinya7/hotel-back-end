@@ -30,6 +30,7 @@ app.use(helmet());
         "http://localhost:5174",
         "https://admin.hotel-lotse.app",
         "https://hotel-lotse.app",
+        "https://guest.hotel-lotse.app"
       ];
 app.use(
   cors({
