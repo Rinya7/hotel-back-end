@@ -49,6 +49,8 @@ export const getStaysByStatus = async (req: AuthRequest, res: Response) => {
     checkIn: s.checkIn, // DATE (yyyy-mm-dd)
     checkOut: s.checkOut, // DATE (yyyy-mm-dd)
     balance: s.balance,
+    createdAt: s.createdAt ? s.createdAt.toISOString() : null, // Дата создания (ISO string)
+    statusChangedAt: s.updatedAt ? s.updatedAt.toISOString() : null, // Дата последнего изменения (ISO string)
   }));
 
   return res.json({ count: data.length, items: data });

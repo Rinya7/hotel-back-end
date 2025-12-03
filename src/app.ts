@@ -53,10 +53,15 @@ app.use(express.json());
 // Rate Limit Global
 app.use(
   rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 300,
+    windowMs: 15 * 60 * 1000, // 15 минут
+    max: 300, // максимум 300 запросов за 15 минут
     standardHeaders: true,
     legacyHeaders: false,
+    skip: (req: Request) => {
+      // Пропускаем rate limit для localhost (разработка)
+      const ip = req.ip || "";
+      return ip.includes("127.0.0.1") || ip.includes("::1");
+    },
   })
 );
 
