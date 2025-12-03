@@ -174,6 +174,8 @@ export async function updateRoomStatus(
   }
 
   const skipWhenCleaning = options?.skipWhenCleaning !== false;
+  // Если комната в статусе "cleaning", не пересчитываем статус (оставляем как есть)
+  // Это важно, так как "cleaning" устанавливается вручную или при чекауте
   if (skipWhenCleaning && room.status === "cleaning") {
     return room;
   }
@@ -183,9 +185,18 @@ export async function updateRoomStatus(
   );
 
   let nextStatus: RoomStatus = room.status;
+  
+  // Если есть occupied stay, комната должна быть "occupied"
   if (activeStays.some((s) => s.status === "occupied")) {
     nextStatus = "occupied";
   } else {
+    // Если нет активных stays, комната должна быть "free"
+    // НО только если она не в статусе "cleaning"
+    // (статус "cleaning" устанавливается вручную при чекауте и не должен пересчитываться)
+    if (room.status === "cleaning") {
+      // Если комната в статусе "cleaning", оставляем как есть
+      return room;
+    }
     nextStatus = "free";
   }
 
@@ -675,9 +686,39 @@ export const resolveCheckInNow = async (req: AuthRequest, res: Response) => {
     });
   }
 
-  // Встановлюємо checkIn = today
+  // Проверка состояния комнаты: не должна быть occupied или cleaning
+  if (stay.room.status === "occupied" || stay.room.status === "cleaning") {
+    return res.status(400).json({
+      message: "Room is not available for check-in. Current status: " + stay.room.status,
+    });
+  }
+
+  // Проверка конфликтов: проверяем, нет ли другого occupied stay в этой комнате
+  const stayRepo = AppDataSource.getRepository(Stay);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const checkOutDate = new Date(stay.checkOut);
+  checkOutDate.setHours(0, 0, 0, 0);
+
+  const conflictingStays = await stayRepo
+    .createQueryBuilder("s")
+    .leftJoin("s.room", "r")
+    .where("r.id = :roomId", { roomId: stay.room.id })
+    .andWhere("s.id != :stayId", { stayId: stay.id })
+    .andWhere("s.status = :status", { status: "occupied" })
+    .andWhere("s.checkIn < :checkOut AND s.checkOut > :checkIn", {
+      checkIn: today,
+      checkOut: checkOutDate,
+    })
+    .getMany();
+
+  if (conflictingStays.length > 0) {
+    return res.status(400).json({
+      message: "Room is already occupied by another stay during this period",
+    });
+  }
+
+  // Встановлюємо checkIn = today
   stay.checkIn = today;
   await AppDataSource.getRepository(Stay).save(stay);
 
@@ -770,17 +811,56 @@ export const resolveEditDates = async (req: AuthRequest, res: Response) => {
     });
   }
 
+  // Вычисляем новые даты для проверки конфликтов
+  const newCheckIn = checkIn ? new Date(checkIn) : new Date(stay.checkIn);
+  newCheckIn.setHours(0, 0, 0, 0);
+  const newCheckOut = checkOut ? new Date(checkOut) : new Date(stay.checkOut);
+  newCheckOut.setHours(0, 0, 0, 0);
+
+  // Валидация: checkOut должен быть после checkIn
+  if (newCheckOut <= newCheckIn) {
+    return res.status(400).json({
+      message: "Check-out date must be after check-in date",
+    });
+  }
+
+  // Проверка конфликтов: проверяем, нет ли других активных stays в этой комнате с пересекающимися датами
+  const stayRepo = AppDataSource.getRepository(Stay);
+  const conflictingStays = await stayRepo
+    .createQueryBuilder("s")
+    .leftJoin("s.room", "r")
+    .where("r.id = :roomId", { roomId: stay.room.id })
+    .andWhere("s.id != :stayId", { stayId: stay.id })
+    .andWhere("s.status IN (:...activeStatuses)", {
+      activeStatuses: ["booked", "occupied"],
+    })
+    .andWhere("s.checkIn < :newCheckOut AND s.checkOut > :newCheckIn", {
+      newCheckIn,
+      newCheckOut,
+    })
+    .getMany();
+
+  if (conflictingStays.length > 0) {
+    const conflictInfo = conflictingStays.map((s) => ({
+      id: s.id,
+      guest: s.mainGuestName,
+      checkIn: s.checkIn.toISOString().slice(0, 10),
+      checkOut: s.checkOut.toISOString().slice(0, 10),
+      status: s.status,
+    }));
+    return res.status(400).json({
+      message: "The selected dates conflict with existing bookings in this room",
+      conflicts: conflictInfo,
+    });
+  }
+
   // Оновлюємо дати якщо надані
   if (checkIn) {
-    const checkInDate = new Date(checkIn);
-    checkInDate.setHours(0, 0, 0, 0);
-    stay.checkIn = checkInDate;
+    stay.checkIn = newCheckIn;
   }
 
   if (checkOut) {
-    const checkOutDate = new Date(checkOut);
-    checkOutDate.setHours(0, 0, 0, 0);
-    stay.checkOut = checkOutDate;
+    stay.checkOut = newCheckOut;
   }
 
   // Очищаємо needsAction
@@ -830,9 +910,50 @@ export const resolveExtendStay = async (req: AuthRequest, res: Response) => {
     });
   }
 
-  // Оновлюємо checkOut
+  // Вычисляем новую дату выезда для проверки конфликтов
   const checkOutDate = new Date(checkOut);
   checkOutDate.setHours(0, 0, 0, 0);
+  const checkInDate = new Date(stay.checkIn);
+  checkInDate.setHours(0, 0, 0, 0);
+
+  // Валидация: checkOut должен быть после checkIn
+  if (checkOutDate <= checkInDate) {
+    return res.status(400).json({
+      message: "Check-out date must be after check-in date",
+    });
+  }
+
+  // Проверка конфликтов: проверяем, нет ли других активных stays в этой комнате с пересекающимися датами
+  const stayRepo = AppDataSource.getRepository(Stay);
+  const conflictingStays = await stayRepo
+    .createQueryBuilder("s")
+    .leftJoin("s.room", "r")
+    .where("r.id = :roomId", { roomId: stay.room.id })
+    .andWhere("s.id != :stayId", { stayId: stay.id })
+    .andWhere("s.status IN (:...activeStatuses)", {
+      activeStatuses: ["booked", "occupied"],
+    })
+    .andWhere("s.checkIn < :newCheckOut AND s.checkOut > :checkIn", {
+      checkIn: checkInDate,
+      newCheckOut: checkOutDate,
+    })
+    .getMany();
+
+  if (conflictingStays.length > 0) {
+    const conflictInfo = conflictingStays.map((s) => ({
+      id: s.id,
+      guest: s.mainGuestName,
+      checkIn: s.checkIn.toISOString().slice(0, 10),
+      checkOut: s.checkOut.toISOString().slice(0, 10),
+      status: s.status,
+    }));
+    return res.status(400).json({
+      message: "The extended dates conflict with existing bookings in this room",
+      conflicts: conflictInfo,
+    });
+  }
+
+  // Оновлюємо checkOut
   stay.checkOut = checkOutDate;
 
   // Очищаємо needsAction
