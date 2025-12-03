@@ -26,11 +26,12 @@ app.use(helmet());
 //    ? ["https://admin.hotel-lotse.app", "https://hotel-lotse.app"]
 //    : ["http://localhost:5173", "http://localhost:5174"];
     const allowedOrigins: string[] = [
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "https://admin.hotel-lotse.app",
-        "https://hotel-lotse.app",
-        "https://guest.hotel-lotse.app"
+        "http://localhost:5173",          // admin local
+  "http://localhost:5174",          // guest local
+  "https://admin.hotel-lotse.app",  // admin prod
+  "https://guest.hotel-lotse.app",  // guest prod
+  "https://api.hotel-lotse.app",    // якщо будеш тикати API прямо
+  "https://hotel-lotse.app",        // на майбутнє, якщо буде маркетинговий фронт, що стукає в API
       ];
 app.use(
   cors({
@@ -77,9 +78,14 @@ app.use(
   })
 );
 
-// Test route
+// Test route (також використовується для healthcheck)
 app.get("/", (_req, res) => {
   res.send("Hotel backend is running!");
+});
+
+// Health check endpoint для Docker/K8s
+app.get("/health", (_req, res) => {
+  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
 /**

@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # PostgreSQL база даних
+  postgres:
+    image: postgres:16-alpine
+    container_name: hotel-db
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-mysecretpassword}
+      POSTGRES_DB: ${DB_NAME:-hotel}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - hotel-network
+
+  # Backend API
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hotel-backend
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      # База даних
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-mysecretpassword}
+      DB_NAME: ${DB_NAME:-hotel}
+      
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-key-here}
+      
+      # Супер-адмін
+      SUPERADMIN_USERNAME: ${SUPERADMIN_USERNAME:-superadmin}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-your-superadmin-password}
+      
+      # Опціональні параметри
+      NODE_ENV: production
+      PORT: 3000
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+      START_SCHEDULER: ${START_SCHEDULER:-true}
+      
+      # URL конфігурація
+      BASE_URL: ${BASE_URL:-http://localhost:3000}
+      GUEST_APP_BASE_URL: ${GUEST_APP_BASE_URL:-http://localhost:5174}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hotel-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  hotel-network:
+    driver: bridge
+
