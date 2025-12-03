@@ -104,3 +104,8 @@ docker ps | grep backend
 
 14) Перезапуск PostgreSQL (лише якщо треба)
 docker compose restart db
+
+ЗМІНИ В .env.production
+cd /opt/hotel-lotse/backend
+nano .env.production 
+

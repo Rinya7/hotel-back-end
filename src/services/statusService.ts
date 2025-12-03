@@ -75,10 +75,10 @@ export class StatusService {
 
       // === 1) BOOKED → OCCUPIED when check-in time has arrived ===
       // ... (весь код закоментовано)
-      
+
       // === 2) OCCUPIED → COMPLETED when check-out time has passed ===
       // ... (весь код закоментовано)
-      
+
       // === 3) Safety reconciliation (compute from stays for all rooms) ===
       // await this.reconcileRooms(manager);
     });

@@ -227,10 +227,16 @@ export const createStayForRoom = async (req: AuthRequest, res: Response) => {
   });
   await stayLogRepo.save(creationLog);
 
+  // Обновляем статус комнаты только для определенных статусов stay
+  // Согласно логике: booked → статус комнаты не меняется (остается "free")
+  // occupied → статус комнаты "occupied" (устанавливается при чекине)
+  // completed → статус комнаты "cleaning" (устанавливается при чекауте)
+  // cancelled → статус комнаты "free" (устанавливается при отмене)
   const roomStatusFromStay: Partial<Record<Stay["status"], Room["status"]>> = {
     occupied: "occupied",
     completed: "cleaning",
     cancelled: "free",
+    // booked не меняет статус комнаты - он остается как был (обычно "free")
   };
 
   const nextRoomStatus = roomStatusFromStay[finalStatus];

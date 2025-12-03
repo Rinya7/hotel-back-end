@@ -10,7 +10,7 @@ import { Room } from "../entities/Room";
 import { Admin } from "../entities/Admin";
 import { AuthRequest } from "../middlewares/authMiddleware";
 import {
-  GuestStayView,
+  GuestStayView, 
   GenerateTokenResponse,
   GuestAccessErrorResponse,
 } from "../types/guest";
