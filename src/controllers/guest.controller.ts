@@ -139,7 +139,7 @@ export class GuestController {
     const baseUrl: string =
       process.env.GUEST_APP_BASE_URL ?? 
       (process.env.NODE_ENV === "production" 
-        ? "http://46.224.81.114:3000" 
+        ? "https://guest.hotel-lotse.app" 
         : "http://localhost:5174");
 
     // Повний URL, який ми будемо відправляти гостю
@@ -530,7 +530,7 @@ export class GuestController {
       const baseUrl: string =
         process.env.GUEST_APP_BASE_URL ??
         (process.env.NODE_ENV === "production"
-          ? "https://hotel-lotse.app"
+          ? "https://guest.hotel-lotse.app"
           : "http://localhost:5174");
 
       const guestUrl: string = `${baseUrl}/access/${encodeURIComponent(tokenEntity.token)}`;
