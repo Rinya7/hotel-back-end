@@ -4,6 +4,17 @@
 
 ## [2025-12-03]
 
+### Added
+- **Docker поддержка**: Добавлена полная Docker конфигурация для backend
+  - `Dockerfile` с multi-stage build для оптимизации размера образа
+  - `.dockerignore` для исключения ненужных файлов из контекста сборки
+  - `docker-compose.yml` для удобного запуска backend + PostgreSQL
+  - `DOCKER.md` - полная документация по развертыванию с Docker
+  - Добавлен `/health` endpoint для healthcheck контейнера
+  - Настроен непривилегированный пользователь для безопасности
+
+## [2025-12-03]
+
 ### Fixed
 - **OpenAPI документация**: Обновлен URL production сервера в `openapi/openapi.base.yaml`
   - Заменен устаревший внутренний адрес `http://46.224.81.114:3000` на публичный `https://hotel-lotse.app`
