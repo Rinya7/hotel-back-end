@@ -5,6 +5,19 @@
 ## [2025-12-03]
 
 ### Fixed
+- **OpenAPI документация**: Обновлен URL production сервера в `openapi/openapi.base.yaml`
+  - Заменен устаревший внутренний адрес `http://46.224.81.114:3000` на публичный `https://hotel-lotse.app`
+  - Добавлено пояснение про Nginx reverse proxy
+  - Теперь документация отражает реальную конфигурацию production окружения
+
+### Configuration
+- **guest.controller.ts**: Исправлены fallback URL для `GUEST_APP_BASE_URL`
+  - Заменен неправильный fallback для production с `http://46.224.81.114:3000` на `https://guest.hotel-lotse.app`
+  - Теперь в обоих местах используется правильный адрес guest-app для production окружения
+
+## [2025-12-03] (раньше)
+
+### Fixed
 - **guest.controller.ts**: Исправлены fallback URL для `GUEST_APP_BASE_URL` в методах `createGuestAccessLink()` и `sendGuestAccessLinkEmail()`
   - Заменен неправильный fallback для production с `http://46.224.81.114:3000` (адрес бэкенда) на `https://guest.hotel-lotse.app`
   - Заменен неправильный fallback для production с `https://hotel-lotse.app` (адрес админки) на `https://guest.hotel-lotse.app`
