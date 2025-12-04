@@ -17,57 +17,60 @@ import { setupOpenApiValidator } from "./config/openapi-validator";
 
 const app = express();
 
-// Безпека/базові мідлвари
+// ------------------------------------------------------------
+// 0) Trust proxy (для правильної роботи з Nginx reverse proxy)
+// ------------------------------------------------------------
+app.set("trust proxy", 1);
+
+// ------------------------------------------------------------
+// 1) Безпека
+// ------------------------------------------------------------
 app.use(helmet());
 
-// CORS конфігурація з динамічною перевіркою origin
-//const allowedOrigins: string[] =
-//  process.env.NODE_ENV === "production"
-//    ? ["https://admin.hotel-lotse.app", "https://hotel-lotse.app"]
-//    : ["http://localhost:5173", "http://localhost:5174"];
-    const allowedOrigins: string[] = [
-        "http://localhost:5173",          // admin local
-  "http://localhost:5174",          // guest local
-  "https://admin.hotel-lotse.app",  // admin prod
-  "https://guest.hotel-lotse.app",  // guest prod
-  "https://api.hotel-lotse.app",    // якщо будеш тикати API прямо
-  "https://hotel-lotse.app",        // на майбутнє, якщо буде маркетинговий фронт, що стукає в API
-      ];
+// ------------------------------------------------------------
+// 2) CORS — правильний порядок, чітко визначені домени
+// ------------------------------------------------------------
+const allowedOrigins: string[] = [
+  "http://localhost:5173",        // admin local
+  "http://localhost:5174",        // guest local
+  "https://admin.hotel-lotse.app",
+  "https://guest.hotel-lotse.app",
+  "https://hotel-lotse.app",
+  "https://api.hotel-lotse.app",
+];
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Дозволяємо запити без origin (наприклад, Postman, curl)
-      if (!origin) {
-        return callback(null, true);
-      }
-      // Перевіряємо, чи origin в списку дозволених
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      // Блокуємо всі інші origins
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
   })
 );
+
+// ------------------------------------------------------------
+// 3) JSON parser
+// ------------------------------------------------------------
 app.use(express.json());
 
-// Rate Limit Global
+// ------------------------------------------------------------
+// 4) Rate Limits
+// ------------------------------------------------------------
 app.use(
   rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 минут
-    max: 300, // максимум 300 запросов за 15 минут
+    windowMs: 15 * 60 * 1000,
+    max: 300,
     standardHeaders: true,
     legacyHeaders: false,
     skip: (req: Request) => {
-      // Пропускаем rate limit для localhost (разработка)
       const ip = req.ip || "";
       return ip.includes("127.0.0.1") || ip.includes("::1");
     },
   })
 );
 
-// Rate Limit Login
 app.use(
   "/auth/login",
   rateLimit({
@@ -78,35 +81,39 @@ app.use(
   })
 );
 
-// Test route (також використовується для healthcheck)
+// ------------------------------------------------------------
+// 5) Тест і healthcheck — ДО валідатора
+// ------------------------------------------------------------
 app.get("/", (_req, res) => {
   res.send("Hotel backend is running!");
 });
 
-// Health check endpoint для Docker/K8s
 app.get("/health", (_req, res) => {
-  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  res.status(200).json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+  });
 });
 
-/**
- * 1) Спочатку монтуємо Swagger UI + /docs.json
- *    — щоб їх не блокував валідатор.
- */
-const openapiDoc = setupSwagger(app); // це тільки для UI/JSON
+// ------------------------------------------------------------
+// 6) Swagger – ДО валідатора
+// ------------------------------------------------------------
+setupSwagger(app);
 
-/**
- * 2) Далі підключаємо валідатор, який буде перевіряти
- *    усі запити/відповіді згідно openapi.yaml,
- *    але ігнорувати /docs та /docs.json (див. ignorePaths).
- */
-// OpenAPI Validator (after Swagger)
-setupOpenApiValidator(app); // валідатор читає файл сам
+// ------------------------------------------------------------
+// 7) OpenAPI Validator — після Swagger, ДО маршрутів
+// ------------------------------------------------------------
+setupOpenApiValidator(app);
 
-// Обробка помилок валідації OpenAPI
-// Validator error handler
+// ------------------------------------------------------------
+// 8) Обробка помилок OpenAPI
+// ------------------------------------------------------------
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   if (err.status === 400 && err.errors) {
-    console.error("[OpenAPI Validator] Validation error:", JSON.stringify(err.errors, null, 2));
+    console.error(
+      "[OpenAPI Validator] Validation error:",
+      JSON.stringify(err.errors, null, 2)
+    );
     return res.status(400).json({
       message: "Validation error",
       errors: err.errors,
@@ -115,7 +122,9 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   next(err);
 });
 
-// ===== Routes (після валідатора) =====
+// ------------------------------------------------------------
+// 9) ВСІ РОУТИ — після валідатора
+// ------------------------------------------------------------
 app.use("/auth", authRoutes);
 app.use("/rooms", roomRoutes);
 app.use("/rooms", roomStay);
