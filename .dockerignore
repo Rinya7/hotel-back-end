@@ -31,7 +31,7 @@ Thumbs.db
 # Documentation (optional - можна залишити)
 # README.md
 # CHANGELOG.md
-# *.md
+*.md
 
 # Tests
 coverage

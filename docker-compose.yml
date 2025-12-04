@@ -24,7 +24,7 @@ services:
   # Backend API
   backend:
     build:
-      context: .
+      context: .  # Контекст сборки - директория hotel-backend (независимый проект)
       dockerfile: Dockerfile
     container_name: hotel-backend
     ports:
