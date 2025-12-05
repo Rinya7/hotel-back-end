@@ -13,7 +13,7 @@
  * Используются, если у отеля не указан logo_url
  *
  * 🔧 ИЗМЕНИТЬ: Добавьте или замените URL на свои варианты логотипов
- * ⚠️ ВАЖНО: Также измените DEFAULT_HOTEL_LOGO_VARIANTS в admin-frontend/src/constants/defaults.ts
+ * ⚠️ ВАЖНО: Также измените DEFAULT_HOTEL_LOGO_VARIANTS в admin/src/constants/defaults.ts
  */
 export const DEFAULT_HOTEL_LOGO_VARIANTS = [
   "https://img.icons8.com/doodle/48/cottage--v1.png",
@@ -45,7 +45,7 @@ export function getRandomHotelLogo(): string {
  * 🔧 ИЗМЕНИТЬ: Измените на нужный час (0-23)
  * Текущее значение: 14 (14:00 / 2 PM)
  *
- * ⚠️ ВАЖНО: Также измените DEFAULT_CHECK_IN_HOUR в admin-frontend/src/constants/defaults.ts
+ * ⚠️ ВАЖНО: Также измените DEFAULT_CHECK_IN_HOUR в admin/src/constants/defaults.ts
  */
 export const DEFAULT_CHECK_IN_HOUR = 14;
 
@@ -56,6 +56,6 @@ export const DEFAULT_CHECK_IN_HOUR = 14;
  * 🔧 ИЗМЕНИТЬ: Измените на нужный час (0-23)
  * Текущее значение: 10 (10:00 / 10 AM)
  *
- * ⚠️ ВАЖНО: Также измените DEFAULT_CHECK_OUT_HOUR в admin-frontend/src/constants/defaults.ts
+ * ⚠️ ВАЖНО: Также измените DEFAULT_CHECK_OUT_HOUR в admin/src/constants/defaults.ts
  */
 export const DEFAULT_CHECK_OUT_HOUR = 10;

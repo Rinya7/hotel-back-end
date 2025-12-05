@@ -7,7 +7,7 @@ info:
     до файла у /openapi/paths/*.yaml, де PathItem зберігається під ключами-ідентифікаторами.
 
 servers:
-  - url: https://hotel-lotse.app
+  - url: https://api.hotel-lotse.app
     description: Production server (через Nginx reverse proxy)
   - url: http://localhost:3000
     description: Local dev

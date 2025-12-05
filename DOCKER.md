@@ -75,7 +75,7 @@ RUN_MIGRATIONS=true
 START_SCHEDULER=true
 
 # URL конфігурація
-BASE_URL=https://hotel-lotse.app
+BASE_URL=https://api.hotel-lotse.app
 GUEST_APP_BASE_URL=https://guest.hotel-lotse.app
 ```
 

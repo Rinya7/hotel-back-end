@@ -53,11 +53,20 @@ services:
       # URL конфігурація
       BASE_URL: ${BASE_URL:-http://localhost:3000}
       GUEST_APP_BASE_URL: ${GUEST_APP_BASE_URL:-http://localhost:5174}
+    labels:
+      - "traefik.enable=true"
+      # Router
+      - "traefik.http.routers.backend.rule=Host(`api.hotel-lotse.app`)"
+      - "traefik.http.routers.backend.entrypoints=websecure"
+      - "traefik.http.routers.backend.tls.certresolver=cf"
+      # Service (вказує Traefik, на який порт всередині контейнера йти)
+      - "traefik.http.services.backend.loadbalancer.server.port=3000"
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - hotel-network
+      - traefik_default
     restart: unless-stopped
 
 volumes:
@@ -66,4 +75,6 @@ volumes:
 networks:
   hotel-network:
     driver: bridge
+  traefik_default:
+    external: true
 

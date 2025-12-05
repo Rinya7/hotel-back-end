@@ -38,7 +38,7 @@ src/constants/
 
 **Важливо:**
 
-- Зміни в цьому файлі мають синхронізуватися з `admin-frontend/src/constants/defaults.ts`
+- Зміни в цьому файлі мають синхронізуватися з `admin/src/constants/defaults.ts`
 - Значення використовуються в entity Admin як default
 
 ### countries.ts
@@ -54,7 +54,7 @@ src/constants/
 
 - В формах створення/редагування готелю
 - Для валідації коду країни
-- Синхронізовано з `admin-frontend/src/constants/countries.ts`
+- Синхронізовано з `admin/src/constants/countries.ts`
 
 ### italianProvinces.ts
 
@@ -69,7 +69,7 @@ src/constants/
 
 - В формах створення/редагування готелю
 - Для валідації провінції
-- Синхронізовано з `admin-frontend/src/constants/italianProvinces.ts`
+- Синхронізовано з `admin/src/constants/italianProvinces.ts`
 
 ## Важливі моменти
 
